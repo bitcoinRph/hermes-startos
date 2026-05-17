@@ -1,0 +1,5 @@
+node_modules
+dist
+javascript
+.DS_Store
+*.s9pk
