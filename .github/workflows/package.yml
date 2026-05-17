@@ -39,6 +39,9 @@ jobs:
           chmod +x "$HOME/.local/bin/start-cli"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Initialize StartOS developer key
+        run: start-cli init-key
+
       - name: Build package
         run: make x86_64
 
