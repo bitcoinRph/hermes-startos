@@ -5,7 +5,7 @@ export const manifest = setupManifest({
   id: "hermes-agent-startos",
   title: "Hermes Agent",
   license: "MIT",
-  packageRepo: "https://github.com/your-org/hermes-agent-startos",
+  packageRepo: "https://github.com/bitcoinRph/hermes-startos",
   upstreamRepo: "https://github.com/NousResearch/hermes-agent",
   marketingUrl: "https://hermes-agent.nousresearch.com/",
   donationUrl: null,
@@ -14,9 +14,7 @@ export const manifest = setupManifest({
   images: {
     main: {
       source: {
-        dockerBuild: {
-          workdir: "./upstream-project",
-        },
+        dockerTag: "nousresearch/hermes-agent:latest",
       },
       arch: ["x86_64", "aarch64"],
     },
