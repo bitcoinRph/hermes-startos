@@ -20,7 +20,8 @@ What is not finished yet:
 - final StartOS SDK wiring and build validation
 - platform-specific packaging polish
 - migration, setup, and action flows
+- GitHub-hosted `.s9pk` packaging workflow
 
 Next step:
 
-- wire this scaffold into a real StartOS build and confirm the Hermes gateway/dashboard start cleanly inside StartOS
+- build the `.s9pk` on GitHub Actions or a compatible packaging host

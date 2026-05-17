@@ -1,0 +1,44 @@
+name: Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master"]
+    paths-ignore: ["*.md"]
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make podman buildah fuse-overlayfs slirp4netns uidmap squashfs-tools squashfs-tools-ng jq
+
+      - name: Configure container registries
+        run: |
+          sudo mkdir -p /etc/containers/registries.conf.d
+          printf 'unqualified-search-registries = ["docker.io"]\n' | sudo tee /etc/containers/registries.conf.d/99-dockerio.conf
+
+      - name: Install Start CLI
+        run: |
+          curl -fsSL https://start9labs.github.io/start-cli | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build package
+        run: make x86_64
+
+      - name: Upload .s9pk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-agent-startos_x86_64
+          path: hermes-agent-startos_x86_64.s9pk

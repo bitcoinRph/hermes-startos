@@ -14,7 +14,9 @@ export const manifest = setupManifest({
   images: {
     main: {
       source: {
-        dockerTag: "nousresearch/hermes-agent:latest",
+        dockerBuild: {
+          workdir: "./upstream-project",
+        },
       },
       arch: ["x86_64", "aarch64"],
     },

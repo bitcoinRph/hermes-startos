@@ -1,7 +1,7 @@
 # ** Plumbing. DO NOT EDIT **.
 # This file is imported by ./Makefile. Make edits there
 
-PACKAGE_ID := $(shell awk -F"'"'/id:/ {print $$2}' startos/manifest/index.ts)
+PACKAGE_ID := $(shell awk -F'"' '/id: "/ {print $$2; exit}' startos/manifest/index.ts)
 INGREDIENTS := $(shell start-cli s9pk list-ingredients 2>/dev/null)
 GIT_DIR := $(shell git rev-parse --git-dir 2>/dev/null)
 GIT_DEPS := $(if $(GIT_DIR),$(GIT_DIR)/HEAD $(GIT_DIR)/index)
@@ -120,7 +120,7 @@ javascript/index.js: $(shell find startos -type f) tsconfig.json node_modules
 	npm run build
 
 node_modules: package-lock.json
-	npm ci
+	npm ci --include=dev
 
 package-lock.json: package.json
 	npm i
