@@ -6,17 +6,20 @@ on:
     branches: ["master"]
     paths-ignore: ["*.md"]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   package:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           submodules: recursive
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: "22"
           cache: "npm"
@@ -51,7 +54,7 @@ jobs:
         run: make x86_64
 
       - name: Upload .s9pk artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: hermes-agent-startos_x86_64
           path: hermes-agent-startos_x86_64.s9pk
