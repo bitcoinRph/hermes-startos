@@ -19,7 +19,7 @@ export const main = sdk.setupMain(
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        command: sdk.useEntrypoint(["gateway", "start"]),
+        command: sdk.useEntrypoint(["gateway", "run"]),
         env: {
           HERMES_DASHBOARD: "1",
           HERMES_DASHBOARD_HOST: "0.0.0.0",

@@ -11,7 +11,7 @@ When Claude Code works here:
 Current runtime model:
 
 - Hermes upstream Dockerfile and entrypoint are reused
-- the main StartOS daemon starts `hermes gateway start`
+- the main StartOS daemon starts `hermes gateway run`
 - the Hermes dashboard is exposed on port `9119`
 - the main StartOS volume is mounted at `/opt/data`
 
