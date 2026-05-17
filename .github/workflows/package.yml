@@ -31,7 +31,9 @@ jobs:
 
       - name: Install Start CLI
         run: |
-          curl -fsSL https://start9labs.github.io/start-cli | sh
+          url="$(curl -fsSL https://api.github.com/repos/Start9Labs/start-os/releases/latest | jq -r '.assets[] | select(.name == "start-cli_x86_64-linux") | .browser_download_url' | head -n 1)"
+          curl -fsSL "$url" -o "$HOME/.local/bin/start-cli"
+          chmod +x "$HOME/.local/bin/start-cli"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Build package
