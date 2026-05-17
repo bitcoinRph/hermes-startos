@@ -24,13 +24,12 @@ jobs:
       - name: Install packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y make podman buildah fuse-overlayfs slirp4netns uidmap squashfs-tools squashfs-tools-ng jq
+          sudo apt-get install -y make buildah fuse-overlayfs slirp4netns uidmap squashfs-tools squashfs-tools-ng jq
 
-      - name: Force podman-backed docker shim
+      - name: Configure Docker Buildx
         run: |
-          mkdir -p "$HOME/bin"
-          ln -sf "$(command -v podman)" "$HOME/bin/docker"
-          echo "$HOME/bin" >> "$GITHUB_PATH"
+          docker buildx create --name hermes-builder --driver docker-container --use
+          docker buildx inspect --bootstrap
 
       - name: Configure container registries
         run: |
