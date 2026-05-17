@@ -31,6 +31,7 @@ jobs:
 
       - name: Install Start CLI
         run: |
+          mkdir -p "$HOME/.local/bin"
           url="$(curl -fsSL https://api.github.com/repos/Start9Labs/start-os/releases/latest | jq -r '.assets[] | select(.name == "start-cli_x86_64-linux") | .browser_download_url' | head -n 1)"
           curl -fsSL "$url" -o "$HOME/.local/bin/start-cli"
           chmod +x "$HOME/.local/bin/start-cli"
