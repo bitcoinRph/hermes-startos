@@ -25,6 +25,9 @@ export const main = sdk.setupMain(
           HERMES_DASHBOARD: "1",
           HERMES_DASHBOARD_HOST: "0.0.0.0",
           HERMES_DASHBOARD_PORT: String(uiPort),
+          // Python searches /opt/data/pylib before the Docker image modules,
+          // allowing persistent patches to survive container restarts.
+          PYTHONPATH: "/opt/data/pylib",
         },
       },
       ready: {
