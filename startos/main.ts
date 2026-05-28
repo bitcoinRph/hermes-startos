@@ -19,8 +19,19 @@ export const main = sdk.setupMain(
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        command: sdk.useEntrypoint(["gateway", "run"]),
+        // The upstream image switched from tini to s6-overlay in 136cb05c.
+        // s6-overlay's /init requires PID 1, which StartOS sub-containers
+        // don't grant — so sdk.useEntrypoint() (which calls /init) crashes.
+        // Instead: run stage2-hook.sh as root for container init (UID remap,
+        // chown, config seed), then drop to hermes via gosu and start the
+        // gateway directly, matching what /init + main-wrapper.sh would do.
+        command: [
+          "/bin/sh",
+          "-c",
+          "HERMES_HOME=/opt/data /opt/hermes/docker/stage2-hook.sh && cd /opt/data && . /opt/hermes/.venv/bin/activate && export HOME=/opt/data && exec gosu hermes hermes gateway run",
+        ],
         env: {
+          HERMES_HOME: "/opt/data",
           HERMES_DASHBOARD: "1",
           HERMES_DASHBOARD_HOST: "0.0.0.0",
           HERMES_DASHBOARD_PORT: String(uiPort),
