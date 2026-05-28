@@ -19,7 +19,18 @@ export const main = sdk.setupMain(
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        command: sdk.useEntrypoint(["gateway", "run"]),
+        // Hermes v0.15.0 switched its Docker ENTRYPOINT to s6-overlay's /init,
+        // which expects to be PID 1. StartOS daemons already supervise the
+        // subcontainer process, so invoking the image entrypoint can fail in
+        // this environment. Run the upstream boot hook directly, then exec the
+        // gateway as the hermes user. This preserves the important first-boot
+        // setup work (config/auth seeding, permissions, skill sync) without
+        // depending on /init.
+        command: [
+          "sh",
+          "-lc",
+          "mkdir -p /run/s6/container_environment && /opt/hermes/docker/stage2-hook.sh && exec s6-setuidgid hermes /opt/hermes/.venv/bin/hermes gateway run",
+        ],
         env: {
           HERMES_HOME: "/opt/data",
           HERMES_DASHBOARD: "1",
