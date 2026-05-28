@@ -50,6 +50,10 @@ jobs:
       - name: Initialize StartOS developer key
         run: start-cli init-key
 
+      - name: Apply Codex OAuth patches
+        working-directory: upstream-project
+        run: python3 ../patches/apply_codex_oauth_fixes.py
+
       - name: Build package
         run: make x86_64
 
