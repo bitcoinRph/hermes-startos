@@ -19,12 +19,7 @@ export const main = sdk.setupMain(
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        // The upstream image uses s6-overlay (since 136cb05c) whose /init
-        // requires PID 1 — StartOS sub-containers don't grant it.  Call
-        // entrypoint.sh directly: it handles UID remap + gosu drop without
-        // any s6 dependency, seeds config, starts the dashboard, then execs
-        // `hermes gateway run`.
-        command: ["/opt/hermes/docker/entrypoint.sh", "gateway", "run"],
+        command: sdk.useEntrypoint(["gateway", "run"]),
         env: {
           HERMES_HOME: "/opt/data",
           HERMES_DASHBOARD: "1",
