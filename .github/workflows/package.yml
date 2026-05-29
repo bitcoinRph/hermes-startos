@@ -50,9 +50,50 @@ jobs:
       - name: Initialize StartOS developer key
         run: start-cli init-key
 
-      - name: Apply Codex OAuth patches
+      - name: Verify bundled Codex OAuth fixes
         working-directory: upstream-project
-        run: python3 ../patches/apply_codex_oauth_fixes.py
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+
+          models_src = Path('hermes_cli/codex_models.py').read_text()
+          models_mod = ast.parse(models_src)
+          defaults = None
+          forward = None
+          for node in models_mod.body:
+              if isinstance(node, ast.AnnAssign) and getattr(node.target, 'id', None) == 'DEFAULT_CODEX_MODELS':
+                  defaults = ast.literal_eval(node.value)
+              if isinstance(node, ast.AnnAssign) and getattr(node.target, 'id', None) == '_FORWARD_COMPAT_TEMPLATE_MODELS':
+                  forward = ast.literal_eval(node.value)
+          if defaults is None:
+              raise SystemExit('DEFAULT_CODEX_MODELS not found')
+          if forward is None:
+              raise SystemExit('_FORWARD_COMPAT_TEMPLATE_MODELS not found')
+          for dead in ('gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'):
+              if dead in defaults:
+                  raise SystemExit(f'dead Codex model still present: {dead}')
+          if 'gpt-5.3-codex-spark' not in defaults:
+              raise SystemExit('gpt-5.3-codex-spark missing from defaults')
+          expected_forward = [
+              ('gpt-5.5', ('gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex')),
+              ('gpt-5.4-mini', ('gpt-5.3-codex',)),
+              ('gpt-5.4', ('gpt-5.3-codex',)),
+              ('gpt-5.3-codex-spark', ('gpt-5.3-codex',)),
+          ]
+          if forward != expected_forward:
+              raise SystemExit(f'Unexpected forward-compat table: {forward!r}')
+          runtime_src = Path('run_agent.py').read_text()
+          required = [
+              'def _run_codex_create_stream_fallback(self, api_kwargs: dict, client: Any = None):',
+              'return self._run_codex_create_stream_fallback(api_kwargs, client=active_client)',
+              'stream_or_response = active_client.responses.create(**fallback_kwargs)',
+          ]
+          for needle in required:
+              if needle not in runtime_src:
+                  raise SystemExit(f'Codex stream guard missing: {needle}')
+          print('Codex OAuth/model and stream guards verified')
+          PY
 
       - name: Build package
         run: make x86_64
