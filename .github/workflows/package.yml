@@ -83,11 +83,12 @@ jobs:
           ]
           if forward != expected_forward:
               raise SystemExit(f'Unexpected forward-compat table: {forward!r}')
-          runtime_src = Path('run_agent.py').read_text()
+          runtime_src = Path('agent/codex_runtime.py').read_text()
           required = [
-              'def _run_codex_create_stream_fallback(self, api_kwargs: dict, client: Any = None):',
-              'return self._run_codex_create_stream_fallback(api_kwargs, client=active_client)',
-              'stream_or_response = active_client.responses.create(**fallback_kwargs)',
+              'backend can return ``null``, ``[]``, a string, or omit the field entirely',
+              'response.output_item.done',
+              'def run_codex_create_stream_fallback(agent, api_kwargs: dict, client: Any = None):',
+              'return run_codex_stream(agent, api_kwargs, client=client)',
           ]
           for needle in required:
               if needle not in runtime_src:

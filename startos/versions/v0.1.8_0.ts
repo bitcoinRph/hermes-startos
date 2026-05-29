@@ -4,7 +4,7 @@ export const v_0_1_8_0 = VersionInfo.of({
   version: '0.1.8:0',
   releaseNotes: {
     en_US:
-      'Fix TypeError crash on every Codex model call. The ChatGPT Codex backend returns output:null in its terminal SSE event; the openai SDK propagates this as TypeError inside stream.__iter__ before the response can be inspected. This adds a TypeError handler in run_codex_stream that recovers from collected stream items or text deltas, matching the existing empty-output backfill logic.',
+      'Track the latest Hermes Agent release from Nous Research while preserving the Codex OAuth model list and streaming guardrails that prevent the ChatGPT Codex backend from breaking on null terminal output.',
   },
   migrations: {
     up: async ({ effects }) => {},
