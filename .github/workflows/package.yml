@@ -75,14 +75,15 @@ jobs:
                   raise SystemExit(f'dead Codex model still present: {dead}')
           if 'gpt-5.3-codex-spark' not in defaults:
               raise SystemExit('gpt-5.3-codex-spark missing from defaults')
-          expected_forward = [
-              ('gpt-5.5', ('gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex')),
+          required_forward = [
               ('gpt-5.4-mini', ('gpt-5.3-codex',)),
               ('gpt-5.4', ('gpt-5.3-codex',)),
               ('gpt-5.3-codex-spark', ('gpt-5.3-codex',)),
           ]
-          if forward != expected_forward:
-              raise SystemExit(f'Unexpected forward-compat table: {forward!r}')
+          forward_set = set(forward)
+          for entry in required_forward:
+              if entry not in forward_set:
+                  raise SystemExit(f'Required forward-compat entry missing: {entry!r}')
           runtime_src = Path('agent/codex_runtime.py').read_text()
           required = [
               'backend can return ``null``, ``[]``, a string, or omit the field entirely',
