@@ -19,13 +19,18 @@ export const main = sdk.setupMain(
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        command: sdk.useEntrypoint(["gateway", "run"]),
+        command: [
+          "/bin/sh",
+          "-c",
+          "/opt/hermes/docker/stage2-hook.sh && " +
+            "cd /opt/data && " +
+            "hermes dashboard --host 0.0.0.0 --port " +
+            uiPort +
+            " --no-open --insecure & " +
+            "exec hermes gateway run",
+        ],
         env: {
           HERMES_HOME: "/opt/data",
-          HERMES_DASHBOARD: "1",
-          HERMES_DASHBOARD_HOST: "0.0.0.0",
-          HERMES_DASHBOARD_PORT: String(uiPort),
-          HERMES_DASHBOARD_INSECURE: "1",
           PYTHONPATH: "/opt/data/pylib",
         },
       },
