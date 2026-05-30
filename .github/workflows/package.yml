@@ -134,11 +134,10 @@ jobs:
           Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System > Sideload Service**.
           EOF
           )
-          if gh release view "$tag" &>/dev/null; then
-            gh release upload "$tag" hermes-agent-startos_x86_64.s9pk --clobber
-          else
-            gh release create "$tag" \
-              --title "${tag} — Hermes Agent v0.15.2" \
-              --notes "$notes" \
-              hermes-agent-startos_x86_64.s9pk
-          fi
+          gh release delete "$tag" --yes 2>/dev/null || true
+          git push origin ":refs/tags/$tag" 2>/dev/null || true
+          gh release create "$tag" \
+            --title "${tag} — Hermes Agent v0.15.2" \
+            --notes "$notes" \
+            --latest \
+            hermes-agent-startos_x86_64.s9pk
