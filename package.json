@@ -1,8 +1,8 @@
 {
   "name": "hermes-agent-startos",
   "private": true,
-  "version": "0.1.9",
-  "description": "Initial StartOS wrapper scaffold for Hermes Agent.",
+  "version": "0.15.2",
+  "description": "StartOS service package for Hermes Agent — self-improving AI agent from Nous Research.",
   "scripts": {
     "check": "tsc --noEmit",
     "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",

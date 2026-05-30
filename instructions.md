@@ -1,24 +1,29 @@
 # Hermes Agent
 
-Hermes Agent is running as a StartOS service.
+Hermes Agent is a self-improving AI agent from Nous Research running as a StartOS service.
 
 ## Documentation
 
-- [Hermes upstream README](https://github.com/NousResearch/hermes-agent) - the upstream project documentation.
-- [StartOS Packaging Guide](https://docs.start9.com/packaging) - reference for StartOS package behavior and packaging conventions.
+- [Hermes Agent README](https://github.com/NousResearch/hermes-agent) — upstream project documentation
+- [StartOS Packaging Guide](https://docs.start9.com/packaging) — reference for StartOS package behavior and packaging conventions
 
 ## What you get on StartOS
 
 - **The Hermes gateway daemon** starts automatically with the package.
-- **The Hermes dashboard** is exposed in the StartOS UI on port `9119`.
+- **The Hermes web dashboard** is exposed in the StartOS UI on port `9119`.
 - **Persistent service data** is stored in the package volume mounted at `/opt/data`.
+- **OpenAI Codex OAuth action** lets you configure ChatGPT Pro credentials from the StartOS UI.
 
 ## Getting set up
 
-This package currently has no custom install wizard or first-run action.
-If Hermes needs additional configuration, manage it the same way you would in the upstream project and restart the service after changes.
+1. Install the package on your Start9 server.
+2. After install, run the **Set OpenAI OAuth Credentials** action to configure your model provider tokens.
+3. Access the Hermes dashboard through the StartOS UI to configure messaging platforms and additional settings.
 
-## Limitations
+## Features
 
-- This wrapper is a packaging scaffold, not a Hermes feature fork.
-- Package build and image assembly still depend on the StartOS packaging toolchain on the host machine.
+- 300+ LLM model support via OpenRouter, OpenAI, Anthropic, NVIDIA NIM, and more
+- 23 messaging platforms including Telegram, Discord, Slack, and WhatsApp
+- Built-in learning loop with autonomous skill creation
+- MCP server support with 40+ integrated tools
+- Multi-agent Kanban orchestration

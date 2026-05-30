@@ -117,15 +117,17 @@ jobs:
           upstream_sha=$(git -C upstream-project rev-parse HEAD)
           notes="## Hermes Agent ${version} for StartOS
 
-Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) at \`${upstream_sha}\`.
+Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v0.15.2 (tag v2026.5.29.2) at \`${upstream_sha}\`.
 
-### Highlights (v0.1.9)
-- Codex TTFB watchdog relaxed 12 s → 120 s for more reliable OAuth streaming
-- Credential-pool marks terminal OAuth failures STATUS_DEAD
-- MCP no longer reports false OAuth success
-- FTS5 session index with graceful degradation
-- Dashboard chat tab works in gated OAuth mode
-- Many gateway, compression, and auth hardening fixes
+### Highlights
+- 76% reduction in core agent code (\"The Velocity Release\")
+- Built-in learning loop with autonomous skill creation
+- 300+ LLM model support via OpenRouter, OpenAI, Anthropic, NVIDIA NIM, and more
+- 23 messaging platforms (Telegram, Discord, Slack, WhatsApp, Signal, etc.)
+- MCP server support with 40+ integrated tools
+- FTS5 session search with LLM summarization
+- Multi-agent Kanban orchestration
+- Dashboard and auth hardening fixes
 
 ### Sideloading
 Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System → Sideload Service**."
@@ -133,7 +135,7 @@ Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 serve
             gh release upload "$tag" hermes-agent-startos_x86_64.s9pk --clobber
           else
             gh release create "$tag" \
-              --title "${tag} — upstream main track" \
+              --title "${tag} — Hermes Agent v0.15.2" \
               --notes "$notes" \
               hermes-agent-startos_x86_64.s9pk
           fi
