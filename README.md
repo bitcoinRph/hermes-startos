@@ -1,28 +1,30 @@
-# Hermes Agent StartOS Wrapper
+# Hermes Agent for StartOS
 
-This is the StartOS wrapper for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+StartOS service package for [Hermes Agent](https://github.com/NousResearch/hermes-agent) v0.15.2 — a self-improving AI agent from Nous Research.
 
-What this wrapper assumes:
+## What this package does
 
-- Hermes runs from its upstream Dockerfile and entrypoint
-- the main StartOS daemon starts the Hermes gateway
-- the Hermes dashboard is exposed as the StartOS UI on port 9119
-- the persistent StartOS volume is mounted at `/opt/data`, matching Hermes's container expectations
+- Runs the Hermes gateway daemon from the upstream Docker image
+- Exposes the Hermes web dashboard on port 9119 via StartOS UI
+- Mounts persistent data at `/opt/data` (matching Hermes's `HERMES_HOME`)
+- Provides a StartOS action for configuring OpenAI Codex OAuth credentials
 
-What is included:
+## What is included
 
-- StartOS manifest, daemon, interface, and init scaffolding
-- a minimal project layout that follows the StartOS packaging guide
-- upstream repo references for Hermes and the packaging guide
-- a Codex OAuth action for entering ChatGPT tokens on the StartOS node
-- GitHub Actions packaging support with Codex model / stream guard validation
+- StartOS manifest, daemon, interface, and init configuration
+- A Codex OAuth action for entering ChatGPT tokens on the StartOS node
+- GitHub Actions CI that builds `.s9pk` packages and publishes releases
+- Codex model and stream guard validation in CI
 
-What remains outside the wrapper scope:
+## Building
 
-- platform-specific packaging polish beyond the wrapper layer
-- future migration/setup flows if upstream Hermes changes its requirements
-- release publishing automation for GitHub-hosted `.s9pk` artifacts
+```bash
+npm ci --include=dev
+npm run check
+npm run build
+make x86_64        # or make aarch64
+```
 
-Next step:
+## Installing
 
-- build the `.s9pk` on GitHub Actions or a compatible packaging host
+Download the `.s9pk` from the [Releases](https://github.com/bitcoinRph/hermes-startos/releases) page and sideload via your Start9 server UI under **System > Sideload Service**.
