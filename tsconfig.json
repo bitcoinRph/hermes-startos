@@ -8,7 +8,7 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "types": []
+    "types": ["node"]
   },
   "include": ["startos/**/*.ts"]
 }
