@@ -11,6 +11,15 @@ INSTALL_DIR="/opt/hermes"
 REAL="$INSTALL_DIR/.venv/bin/hermes"
 S6_SUID=/command/s6-setuidgid
 
+# --- Fix volume ownership (runs as root) ---
+# StartOS mounts its own volume at /opt/data which may be root-owned.
+# The hermes user (UID 10000) needs write access for subdirectory creation.
+actual_uid=$(id -u hermes)
+if [ "$(stat -c %u "$HERMES_HOME" 2>/dev/null)" != "$actual_uid" ]; then
+    echo "[startos] Fixing ownership of $HERMES_HOME to hermes ($actual_uid)"
+    chown hermes:hermes "$HERMES_HOME" 2>/dev/null || true
+fi
+
 # --- Create essential directories as hermes user ---
 $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/cron" \\
@@ -22,7 +31,8 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/skins" \\
     "$HERMES_HOME/plans" \\
     "$HERMES_HOME/workspace" \\
-    "$HERMES_HOME/home"
+    "$HERMES_HOME/home" \\
+    "$HERMES_HOME/profiles"
 
 # --- Install method stamp ---
 printf 'docker\\n' | $S6_SUID hermes tee "$HERMES_HOME/.install_method" >/dev/null || true
@@ -42,6 +52,12 @@ if [ -f "$HERMES_HOME/.env" ]; then
     chmod 600 "$HERMES_HOME/.env" 2>/dev/null || true
 fi
 
+# --- Fix config.yaml permissions ---
+if [ -f "$HERMES_HOME/config.yaml" ]; then
+    chown hermes:hermes "$HERMES_HOME/config.yaml" 2>/dev/null || true
+    chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
+fi
+
 # --- Bootstrap auth.json from env (first boot only) ---
 if [ ! -f "$HERMES_HOME/auth.json" ] && [ -n "\${HERMES_AUTH_JSON_BOOTSTRAP:-}" ]; then
     printf '%s' "$HERMES_AUTH_JSON_BOOTSTRAP" > "$HERMES_HOME/auth.json"
@@ -53,6 +69,18 @@ fi
 if [ -d "$INSTALL_DIR/skills" ]; then
     $S6_SUID hermes "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" || \\
         echo "[startos] Warning: skills_sync.py failed; continuing"
+fi
+
+# --- Discover Chromium for browser tool ---
+if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ] && [ -d "\${PLAYWRIGHT_BROWSERS_PATH:-/nonexistent}" ]; then
+    browser_bin=$(find "\${PLAYWRIGHT_BROWSERS_PATH}" -type f -executable \\
+        \\( -name 'chrome' -o -name 'chromium' \\
+           -o -name 'chrome-headless-shell' -o -name 'chromium-browser' \\) \\
+        2>/dev/null | head -n 1)
+    if [ -n "$browser_bin" ]; then
+        echo "[startos] Found Chromium: $browser_bin"
+        export AGENT_BROWSER_EXECUTABLE_PATH="$browser_bin"
+    fi
 fi
 
 echo "[startos] Setup complete"
