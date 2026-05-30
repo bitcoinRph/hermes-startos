@@ -12,6 +12,8 @@ env:
 jobs:
   package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -105,3 +107,33 @@ jobs:
         with:
           name: hermes-agent-startos_x86_64
           path: hermes-agent-startos_x86_64.s9pk
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          upstream_sha=$(git -C upstream-project rev-parse HEAD)
+          notes="## Hermes Agent ${version} for StartOS
+
+Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) at \`${upstream_sha}\`.
+
+### Highlights (v0.1.9)
+- Codex TTFB watchdog relaxed 12 s → 120 s for more reliable OAuth streaming
+- Credential-pool marks terminal OAuth failures STATUS_DEAD
+- MCP no longer reports false OAuth success
+- FTS5 session index with graceful degradation
+- Dashboard chat tab works in gated OAuth mode
+- Many gateway, compression, and auth hardening fixes
+
+### Sideloading
+Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System → Sideload Service**."
+          if gh release view "$tag" &>/dev/null; then
+            gh release upload "$tag" hermes-agent-startos_x86_64.s9pk --clobber
+          else
+            gh release create "$tag" \
+              --title "${tag} — upstream main track" \
+              --notes "$notes" \
+              hermes-agent-startos_x86_64.s9pk
+          fi
