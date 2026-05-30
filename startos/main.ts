@@ -22,7 +22,8 @@ export const main = sdk.setupMain(
         command: [
           "/bin/sh",
           "-c",
-          "/opt/hermes/docker/stage2-hook.sh && " +
+          "export PATH=/command:$PATH && " +
+            "/opt/hermes/docker/stage2-hook.sh && " +
             "cd /opt/data && " +
             "hermes dashboard --host 0.0.0.0 --port " +
             uiPort +
