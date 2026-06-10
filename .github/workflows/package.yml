@@ -115,6 +115,9 @@ jobs:
           version=$(node -p "require('./package.json').version")
           tag="v${version}"
           upstream_sha=$(git -C upstream-project rev-parse HEAD)
+          # actions/checkout doesn't fetch tags for submodules, so fetch them
+          # before describing or the release notes say "untagged".
+          git -C upstream-project fetch --tags --force --depth=1 origin 2>/dev/null || true
           upstream_tag=$(git -C upstream-project describe --tags --exact-match 2>/dev/null || echo "untagged")
           notes=$(cat <<EOF
           ## Hermes Agent ${version} for StartOS
