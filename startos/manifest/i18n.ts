@@ -1,5 +1,6 @@
 export const short = {
-  en_US: "Self-improving AI agent with 300+ model support and 23 messaging platforms.",
+  en_US:
+    "Self-improving AI agent with 300+ model support and 23 messaging platforms.",
 };
 
 export const long = {
