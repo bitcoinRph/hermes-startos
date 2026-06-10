@@ -115,20 +115,21 @@ jobs:
           version=$(node -p "require('./package.json').version")
           tag="v${version}"
           upstream_sha=$(git -C upstream-project rev-parse HEAD)
+          upstream_tag=$(git -C upstream-project describe --tags --exact-match 2>/dev/null || echo "untagged")
           notes=$(cat <<EOF
           ## Hermes Agent ${version} for StartOS
 
-          Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v0.15.2 (tag v2026.5.29.2) at \`${upstream_sha}\`.
+          Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
-          ### Highlights
-          - 76% reduction in core agent code ("The Velocity Release")
-          - Built-in learning loop with autonomous skill creation
-          - 300+ LLM model support via OpenRouter, OpenAI, Anthropic, NVIDIA NIM, and more
-          - 23 messaging platforms (Telegram, Discord, Slack, WhatsApp, Signal, etc.)
-          - MCP server support with 40+ integrated tools
-          - FTS5 session search with LLM summarization
-          - Multi-agent Kanban orchestration
-          - Dashboard and auth hardening fixes
+          ### Highlights ("The Surface Release")
+          - Native desktop app and browser admin panel
+          - Remote-gateway connect
+          - Simplified Chinese desktop UI
+          - Leaner default skill set with NVIDIA/skills trusted tap
+          - Fuzzy model picker and /undo command
+          - Hindsight memory provider baked into the image
+          - Persisted config schema migrations on upgrade
+          - PUID/PGID support and Docker socket group handling
 
           ### Sideloading
           Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System > Sideload Service**.
@@ -137,7 +138,7 @@ jobs:
           gh release delete "$tag" --yes 2>/dev/null || true
           git push origin ":refs/tags/$tag" 2>/dev/null || true
           gh release create "$tag" \
-            --title "${tag} — Hermes Agent v0.15.2" \
+            --title "${tag} — Hermes Agent v${version}" \
             --notes "$notes" \
             --latest \
             hermes-agent-startos_x86_64.s9pk
