@@ -32,7 +32,9 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/plans" \\
     "$HERMES_HOME/workspace" \\
     "$HERMES_HOME/home" \\
-    "$HERMES_HOME/profiles"
+    "$HERMES_HOME/profiles" \\
+    "$HERMES_HOME/pairing" \\
+    "$HERMES_HOME/platforms/pairing"
 
 # --- Install method stamp ---
 printf 'docker\\n' | $S6_SUID hermes tee "$HERMES_HOME/.install_method" >/dev/null || true
@@ -58,6 +60,14 @@ if [ -f "$HERMES_HOME/config.yaml" ]; then
     chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
 fi
 
+# --- Migrate persisted config schema ---
+# Image upgrades replace code under $INSTALL_DIR but preserve the volume;
+# run the same non-interactive migrations the upstream stage2 hook runs.
+if [ -f "$HERMES_HOME/config.yaml" ] && [ "\${HERMES_SKIP_CONFIG_MIGRATION:-}" != "1" ]; then
+    $S6_SUID hermes "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/scripts/docker_config_migrate.py" || \\
+        echo "[startos] Warning: docker_config_migrate.py failed; continuing"
+fi
+
 # --- Bootstrap auth.json from env (first boot only) ---
 if [ ! -f "$HERMES_HOME/auth.json" ] && [ -n "\${HERMES_AUTH_JSON_BOOTSTRAP:-}" ]; then
     printf '%s' "$HERMES_AUTH_JSON_BOOTSTRAP" > "$HERMES_HOME/auth.json"
@@ -72,8 +82,9 @@ if [ -d "$INSTALL_DIR/skills" ]; then
 fi
 
 # --- Discover Chromium for browser tool ---
-if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ] && [ -d "\${PLAYWRIGHT_BROWSERS_PATH:-/nonexistent}" ]; then
-    browser_bin=$(find "\${PLAYWRIGHT_BROWSERS_PATH}" -type f -executable \\
+PLAYWRIGHT_BROWSERS_PATH="\${PLAYWRIGHT_BROWSERS_PATH:-/opt/hermes/.playwright}"
+if [ -z "\${AGENT_BROWSER_EXECUTABLE_PATH:-}" ] && [ -d "$PLAYWRIGHT_BROWSERS_PATH" ]; then
+    browser_bin=$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f -executable \\
         \\( -name 'chrome' -o -name 'chromium' \\
            -o -name 'chrome-headless-shell' -o -name 'chromium-browser' \\) \\
         2>/dev/null | head -n 1)
@@ -124,6 +135,14 @@ export const main = sdk.setupMain(
         env: {
           HERMES_HOME: "/opt/data",
           PYTHONPATH: "/opt/data/pylib",
+          // 0.16.0 redirects bare `gateway run` to s6 supervision when it
+          // detects the s6 image; we bypass s6 entirely, so opt out.
+          HERMES_GATEWAY_NO_SUPERVISE: "1",
+          // Static image paths normally set by the Dockerfile ENV; pinned
+          // here so the daemon doesn't depend on image env propagation.
+          HERMES_TUI_DIR: "/opt/hermes/ui-tui",
+          HERMES_WEB_DIST: "/opt/hermes/hermes_cli/web_dist",
+          PLAYWRIGHT_BROWSERS_PATH: "/opt/hermes/.playwright",
         },
       },
       ready: {
