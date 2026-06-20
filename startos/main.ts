@@ -21,21 +21,27 @@ if [ "$(stat -c %u "$HERMES_HOME" 2>/dev/null)" != "$actual_uid" ]; then
 fi
 
 # --- Create essential directories as hermes user ---
-$S6_SUID hermes mkdir -p \\
-    "$HERMES_HOME/cron" \\
-    "$HERMES_HOME/sessions" \\
-    "$HERMES_HOME/logs" \\
-    "$HERMES_HOME/logs/gateways" \\
-    "$HERMES_HOME/hooks" \\
-    "$HERMES_HOME/memories" \\
-    "$HERMES_HOME/skills" \\
-    "$HERMES_HOME/skins" \\
-    "$HERMES_HOME/plans" \\
-    "$HERMES_HOME/workspace" \\
-    "$HERMES_HOME/home" \\
-    "$HERMES_HOME/profiles" \\
-    "$HERMES_HOME/pairing" \\
+$S6_SUID hermes mkdir -p \
+    "$HERMES_HOME/cron" \
+    "$HERMES_HOME/sessions" \
+    "$HERMES_HOME/logs" \
+    "$HERMES_HOME/logs/gateways" \
+    "$HERMES_HOME/hooks" \
+    "$HERMES_HOME/memories" \
+    "$HERMES_HOME/skills" \
+    "$HERMES_HOME/skins" \
+    "$HERMES_HOME/plans" \
+    "$HERMES_HOME/workspace" \
+    "$HERMES_HOME/home" \
+    "$HERMES_HOME/profiles" \
+    "$HERMES_HOME/pairing" \
     "$HERMES_HOME/platforms/pairing"
+
+for dir in cron logs/gateways; do
+    if [ -d "$HERMES_HOME/$dir" ]; then
+        chown -R hermes:hermes "$HERMES_HOME/$dir" 2>/dev/null || true
+    fi
+done
 
 # --- Heal stale install-method stamp ---
 # 0.17.0 bakes the 'docker' stamp into the immutable install tree
@@ -46,6 +52,10 @@ if [ -f "$HERMES_HOME/.install_method" ]; then
     stamped="$(tr -d '[:space:]' < "$HERMES_HOME/.install_method" 2>/dev/null || true)"
     [ "$stamped" = "docker" ] && rm -f "$HERMES_HOME/.install_method" 2>/dev/null || true
 fi
+
+# --- Install method stamp ---
+printf 'docker\n' | $S6_SUID hermes tee "$HERMES_HOME/.install_method" >/dev/null || true
+
 
 # --- Seed config files (first boot only) ---
 for pair in ".env:.env.example" "config.yaml:cli-config.yaml.example" "SOUL.md:docker/SOUL.md"; do
@@ -143,11 +153,9 @@ export const main = sdk.setupMain(
         env: {
           HERMES_HOME: "/opt/data",
           PYTHONPATH: "/opt/data/pylib",
-          // 0.16.0 redirects bare `gateway run` to s6 supervision when it
+          // 0.17.0 redirects bare `gateway run` to s6 supervision when it
           // detects the s6 image; we bypass s6 entirely, so opt out.
           HERMES_GATEWAY_NO_SUPERVISE: "1",
-          // Static image paths normally set by the Dockerfile ENV; pinned
-          // here so the daemon doesn't depend on image env propagation.
           HERMES_TUI_DIR: "/opt/hermes/ui-tui",
           HERMES_WEB_DIST: "/opt/hermes/hermes_cli/web_dist",
           PLAYWRIGHT_BROWSERS_PATH: "/opt/hermes/.playwright",
