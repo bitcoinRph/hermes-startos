@@ -17,10 +17,14 @@ Current runtime model:
   schema migration, auth bootstrap, skills sync, Chromium discovery), then
   starts the dashboard in background and `hermes gateway run` in foreground
 - `HERMES_GATEWAY_NO_SUPERVISE=1` pins the pre-s6 foreground gateway behavior
+- as of 0.17.0 the `/opt/hermes` install tree is immutable (root-owned,
+  read-only); the daemon env pins `HERMES_DISABLE_LAZY_INSTALLS=1`,
+  `PYTHONDONTWRITEBYTECODE=1`, and `HERMES_WRITE_SAFE_ROOT=/opt/data` so the
+  runtime never tries to write into it — all mutable state lives on the volume
 - the Hermes dashboard is exposed on port `9119`
 - the main StartOS volume is mounted at `/opt/data`
-- upstream is pinned via the `upstream-project` submodule (currently v2026.6.5,
-  Hermes Agent 0.16.0)
+- upstream is pinned via the `upstream-project` submodule (currently v2026.6.19,
+  Hermes Agent 0.17.0)
 
 Open questions:
 

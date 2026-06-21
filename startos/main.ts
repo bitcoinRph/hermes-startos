@@ -25,6 +25,7 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/cron" \\
     "$HERMES_HOME/sessions" \\
     "$HERMES_HOME/logs" \\
+    "$HERMES_HOME/logs/gateways" \\
     "$HERMES_HOME/hooks" \\
     "$HERMES_HOME/memories" \\
     "$HERMES_HOME/skills" \\
@@ -36,8 +37,15 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/pairing" \\
     "$HERMES_HOME/platforms/pairing"
 
-# --- Install method stamp ---
-printf 'docker\\n' | $S6_SUID hermes tee "$HERMES_HOME/.install_method" >/dev/null || true
+# --- Heal stale install-method stamp ---
+# 0.17.0 bakes the 'docker' stamp into the immutable install tree
+# (/opt/hermes/.install_method, read first by detect_install_method).
+# Older wrapper versions wrote it into the volume; remove that stale copy
+# so it can't shadow the baked stamp on a shared/bind-mounted data dir.
+if [ -f "$HERMES_HOME/.install_method" ]; then
+    stamped="$(tr -d '[:space:]' < "$HERMES_HOME/.install_method" 2>/dev/null || true)"
+    [ "$stamped" = "docker" ] && rm -f "$HERMES_HOME/.install_method" 2>/dev/null || true
+fi
 
 # --- Seed config files (first boot only) ---
 for pair in ".env:.env.example" "config.yaml:cli-config.yaml.example" "SOUL.md:docker/SOUL.md"; do
@@ -143,6 +151,13 @@ export const main = sdk.setupMain(
           HERMES_TUI_DIR: "/opt/hermes/ui-tui",
           HERMES_WEB_DIST: "/opt/hermes/hermes_cli/web_dist",
           PLAYWRIGHT_BROWSERS_PATH: "/opt/hermes/.playwright",
+          // 0.17.0 makes /opt/hermes immutable (root-owned, read-only).
+          // Pin the Dockerfile ENV that keeps the runtime off that tree:
+          // no lazy pip installs into the read-only .venv, no .pyc writes,
+          // and all mutable state confined to the /opt/data volume.
+          HERMES_DISABLE_LAZY_INSTALLS: "1",
+          PYTHONDONTWRITEBYTECODE: "1",
+          HERMES_WRITE_SAFE_ROOT: "/opt/data",
         },
       },
       ready: {
