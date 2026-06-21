@@ -124,15 +124,14 @@ jobs:
 
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
-          ### Highlights ("The Surface Release")
-          - Native desktop app and browser admin panel
-          - Remote-gateway connect
-          - Simplified Chinese desktop UI
-          - Leaner default skill set with NVIDIA/skills trusted tap
-          - Fuzzy model picker and /undo command
-          - Hindsight memory provider baked into the image
-          - Persisted config schema migrations on upgrade
-          - PUID/PGID support and Docker socket group handling
+          ### Highlights ("The Reach Release")
+          - iMessage via Photon and Raft channel support
+          - Async subagents and in-chat image editing
+          - Cursor Composer via xAI Grok
+          - Dashboard profile builder and memory tool upgrade
+          - WhatsApp Business Cloud and rich Telegram
+          - Curator cost optimization
+          - Immutable install tree (read-only /opt/hermes); all mutable state on the data volume
 
           ### Sideloading
           Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System > Sideload Service**.
