@@ -124,13 +124,15 @@ jobs:
 
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
-          ### Highlights ("The Reach Release")
-          - iMessage via Photon and Raft channel support
-          - Async subagents and in-chat image editing
-          - Cursor Composer via xAI Grok
-          - Dashboard profile builder and memory tool upgrade
-          - WhatsApp Business Cloud and rich Telegram
-          - Curator cost optimization
+          ### Highlights
+          - `/learn` command teaches full CONTRIBUTING.md skill standards
+          - Lazy-packages support: optional backend SDKs install to writable volume dir
+          - Z.AI endpoint picker for model setup
+          - Scale-to-zero dormancy guards for gateway
+          - Nous OAuth base-URL override (NOUS_INFERENCE_BASE_URL)
+          - Improved config migration with automatic rollback on failure
+          - Coding verification evidence ledger
+          - Continuable cron delivery with thread-preferred mirroring
           - Immutable install tree (read-only /opt/hermes); all mutable state on the data volume
 
           ### Sideloading
