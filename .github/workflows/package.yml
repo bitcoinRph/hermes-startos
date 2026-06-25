@@ -125,14 +125,16 @@ jobs:
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
           ### Highlights
+          - **Fix:** resolve a startup crash loop where the gateway refused to
+            start after an in-place restart left an orphaned worker holding
+            gateway.pid. The boot script now reaps stale dashboards and starts
+            the gateway with --replace to cleanly take over.
           - `/learn` command teaches full CONTRIBUTING.md skill standards
           - Lazy-packages support: optional backend SDKs install to writable volume dir
           - Z.AI endpoint picker for model setup
           - Scale-to-zero dormancy guards for gateway
           - Nous OAuth base-URL override (NOUS_INFERENCE_BASE_URL)
           - Improved config migration with automatic rollback on failure
-          - Coding verification evidence ledger
-          - Continuable cron delivery with thread-preferred mirroring
           - Immutable install tree (read-only /opt/hermes); all mutable state on the data volume
 
           ### Sideloading
