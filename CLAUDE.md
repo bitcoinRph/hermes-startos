@@ -17,6 +17,12 @@ Current runtime model:
   schema migration, auth bootstrap, skills sync, Chromium discovery), then
   starts the dashboard in background and `hermes gateway run` in foreground
 - `HERMES_GATEWAY_NO_SUPERVISE=1` pins the pre-s6 foreground gateway behavior
+- StartOS restarts a crashed daemon by re-running the boot script in the SAME
+  subcontainer, so background processes survive as orphans. The post-0.17.0
+  gateway is a strict singleton (refuses to start while a live PID is recorded
+  in `/opt/data/gateway.pid`), so the boot script reaps stale dashboards
+  (`dashboard --stop`) and runs `gateway run --replace` to take over from a
+  prior worker — without this the service wedges into a permanent crash loop
 - as of 0.17.0 the `/opt/hermes` install tree is immutable (root-owned,
   read-only); the daemon env pins `HERMES_DISABLE_LAZY_INSTALLS=1`,
   `PYTHONDONTWRITEBYTECODE=1`, and `HERMES_WRITE_SAFE_ROOT=/opt/data` so the

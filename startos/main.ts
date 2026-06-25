@@ -108,13 +108,30 @@ echo "[startos] Setup complete"
 export HOME=/opt/data
 cd /opt/data
 
+# --- Reap orphaned processes from a prior in-place restart ---
+# StartOS restarts a crashed daemon by re-running this script in the SAME
+# subcontainer, so background processes from the previous boot (the dashboard,
+# and the gateway worker whose PID is recorded in /opt/data/gateway.pid) can
+# survive as orphans. The post-0.17.0 gateway is a strict singleton: it refuses
+# to start (exit 1: "Another gateway instance is already running (PID N)") when
+# it finds a live PID in gateway.pid, which would otherwise wedge every restart
+# into a permanent crash loop. Clear any stale dashboard here; the gateway's own
+# orphan is handled atomically by --replace below.
+$S6_SUID hermes "$REAL" dashboard --stop 2>/dev/null || true
+
 # --- Start dashboard (background) ---
 echo "[startos] Starting dashboard on 0.0.0.0:${uiPort}"
 $S6_SUID hermes "$REAL" dashboard --host 0.0.0.0 --port ${uiPort} --no-open --insecure &
 
 # --- Start gateway (foreground) ---
+# --replace makes the gateway take over from any orphaned instance left by a
+# prior boot (it SIGTERM/SIGKILLs the recorded PID, clears the pid file, and
+# releases stale locks) instead of refusing to start — the systemd/launchd
+# pattern, which is exactly StartOS's supervisor role here. --no-supervise is
+# explicit alongside HERMES_GATEWAY_NO_SUPERVISE=1 so the gateway stays the
+# foreground process and its exit code propagates to StartOS.
 echo "[startos] Starting gateway"
-exec $S6_SUID hermes "$REAL" gateway run
+exec $S6_SUID hermes "$REAL" gateway run --replace --no-supervise
 `;
 
 export const main = sdk.setupMain(
