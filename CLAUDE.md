@@ -23,8 +23,11 @@ Current runtime model:
   runtime never tries to write into it — all mutable state lives on the volume
 - the Hermes dashboard is exposed on port `9119`
 - the main StartOS volume is mounted at `/opt/data`
-- upstream is pinned via the `upstream-project` submodule (currently v2026.6.19,
-  Hermes Agent 0.17.0)
+- optional backend SDKs (Firecrawl, Exa, etc.) install to
+  `HERMES_LAZY_INSTALL_TARGET=/opt/data/lazy-packages` on the writable volume,
+  bypassing the sealed venv while preserving its integrity
+- upstream is pinned via the `upstream-project` submodule (currently main@d6269da,
+  post-0.17.0)
 
 Open questions:
 

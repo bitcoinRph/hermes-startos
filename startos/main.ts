@@ -35,7 +35,8 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/home" \\
     "$HERMES_HOME/profiles" \\
     "$HERMES_HOME/pairing" \\
-    "$HERMES_HOME/platforms/pairing"
+    "$HERMES_HOME/platforms/pairing" \\
+    "$HERMES_HOME/lazy-packages"
 
 # --- Heal stale install-method stamp ---
 # 0.17.0 bakes the 'docker' stamp into the immutable install tree
@@ -156,6 +157,7 @@ export const main = sdk.setupMain(
           // no lazy pip installs into the read-only .venv, no .pyc writes,
           // and all mutable state confined to the /opt/data volume.
           HERMES_DISABLE_LAZY_INSTALLS: "1",
+          HERMES_LAZY_INSTALL_TARGET: "/opt/data/lazy-packages",
           PYTHONDONTWRITEBYTECODE: "1",
           HERMES_WRITE_SAFE_ROOT: "/opt/data",
         },
