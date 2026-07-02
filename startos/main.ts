@@ -15,13 +15,65 @@ S6_SUID=/command/s6-setuidgid
 # StartOS mounts its own volume at /opt/data which may be root-owned.
 # The hermes user (UID 10000) needs write access for subdirectory creation.
 actual_uid=$(id -u hermes)
+
+path_has_symlink_component() {
+    path="$1"
+    while [ -n "$path" ] && [ "$path" != "/" ]; do
+        if [ -L "$path" ]; then
+            return 0
+        fi
+        if [ "$path" = "$HERMES_HOME" ]; then
+            break
+        fi
+        parent="$(dirname "$path")"
+        if [ "$parent" = "$path" ]; then
+            break
+        fi
+        path="$parent"
+    done
+    return 1
+}
+
+safe_chown() {
+    target="$1"
+    if path_has_symlink_component "$target"; then
+        echo "[startos] Warning: refusing chown through symlinked path $target — continuing"
+        return 0
+    fi
+    chown hermes:hermes "$target" 2>/dev/null || true
+}
+
+safe_chown_tree() {
+    target="$1"
+    if path_has_symlink_component "$target"; then
+        echo "[startos] Warning: refusing recursive chown through symlinked path $target — continuing"
+        return 0
+    fi
+    chown -R hermes:hermes "$target" 2>/dev/null || true
+}
+
 if [ "$(stat -c %u "$HERMES_HOME" 2>/dev/null)" != "$actual_uid" ]; then
     echo "[startos] Fixing ownership of $HERMES_HOME to hermes ($actual_uid)"
-    chown hermes:hermes "$HERMES_HOME" 2>/dev/null || true
+    safe_chown "$HERMES_HOME"
 fi
+
+# Repair hermes-owned state that may have been touched from a root attach shell.
+for sub in cron profiles; do
+    [ -d "$HERMES_HOME/$sub" ] && safe_chown_tree "$HERMES_HOME/$sub"
+done
+for f in \
+    auth.json auth.lock .env \
+    state.db state.db-shm state.db-wal \
+    hermes_state.db \
+    response_store.db response_store.db-shm response_store.db-wal \
+    gateway.pid gateway.lock gateway_state.json processes.json \
+    active_profile; do
+    [ -e "$HERMES_HOME/$f" ] && safe_chown "$HERMES_HOME/$f"
+done
 
 # --- Create essential directories as hermes user ---
 $S6_SUID hermes mkdir -p \\
+    "$HERMES_HOME/backups" \\
     "$HERMES_HOME/cron" \\
     "$HERMES_HOME/sessions" \\
     "$HERMES_HOME/logs" \\
