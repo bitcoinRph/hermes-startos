@@ -58,7 +58,9 @@ if [ "$(stat -c %u "$HERMES_HOME" 2>/dev/null)" != "$actual_uid" ]; then
 fi
 
 # Repair hermes-owned state that may have been touched from a root attach shell.
-for sub in cron profiles; do
+# Include pairing approvals: hermes pairing approve from root attach shells can
+# leave 0600 root-owned approval files that the unprivileged gateway cannot read.
+for sub in cron profiles pairing platforms/pairing; do
     [ -d "$HERMES_HOME/$sub" ] && safe_chown_tree "$HERMES_HOME/$sub"
 done
 for f in \
@@ -134,6 +136,21 @@ if [ ! -f "$HERMES_HOME/auth.json" ] && [ -n "\${HERMES_AUTH_JSON_BOOTSTRAP:-}" 
     printf '%s' "$HERMES_AUTH_JSON_BOOTSTRAP" > "$HERMES_HOME/auth.json"
     chown hermes:hermes "$HERMES_HOME/auth.json" 2>/dev/null || true
     chmod 600 "$HERMES_HOME/auth.json"
+fi
+
+# --- Re-seed a terminally dead Nous bootstrap session when explicitly provided ---
+# Mirrors upstream docker/stage2-hook.sh for StartOS because this wrapper bypasses
+# the s6 entrypoint. The helper only swaps providers.nous when auth.json is
+# provably terminal; healthy, absent, rotating, or unparseable auth state is a no-op.
+if [ -f "$HERMES_HOME/auth.json" ] && [ -n "\${HERMES_AUTH_JSON_REBOOTSTRAP:-}" ]; then
+    if refuse_symlinked_path "reseed" "$HERMES_HOME/auth.json"; then
+        :
+    else
+        $S6_SUID hermes "$INSTALL_DIR/.venv/bin/python" \
+            "$INSTALL_DIR/scripts/docker_rebootstrap_nous_session.py" \
+            "$HERMES_HOME/auth.json" || \
+            echo "[startos] Warning: docker_rebootstrap_nous_session.py failed; continuing"
+    fi
 fi
 
 # --- Sync bundled skills ---
