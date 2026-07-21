@@ -2,7 +2,7 @@
 # This file is imported by ./Makefile. Make edits there
 
 PACKAGE_ID := $(shell awk -F'"' '/id: "/ {print $$2; exit}' startos/manifest/index.ts)
-INGREDIENTS := $(shell start-cli s9pk list-ingredients 2>/dev/null)
+INGREDIENTS := $(shell start-cli -H http://localhost s9pk list-ingredients 2>/dev/null)
 GIT_DIR := $(shell git rev-parse --git-dir 2>/dev/null)
 GIT_DEPS := $(if $(GIT_DIR),$(GIT_DIR)/HEAD $(GIT_DIR)/index)
 ARCHES ?= x86_64 aarch64 riscv64
@@ -55,12 +55,12 @@ riscv riscv64: arch/riscv64
 $(BASE_NAME).s9pk: $(INGREDIENTS) $(GIT_DEPS)
 	@$(MAKE) --no-print-directory ingredients
 	@echo "   Packing '$@'..."
-	start-cli s9pk pack -o $@
+	start-cli -H http://localhost s9pk pack -o $@
 
 $(BASE_NAME)_%.s9pk: $(INGREDIENTS) $(GIT_DEPS)
 	@$(MAKE) --no-print-directory ingredients
 	@echo "   Packing '$@'..."
-	start-cli s9pk pack --arch=$* -o $@
+	start-cli -H http://localhost s9pk pack --arch=$* -o $@
 
 ingredients: $(INGREDIENTS)
 	@echo "   Re-evaluating ingredients..."
