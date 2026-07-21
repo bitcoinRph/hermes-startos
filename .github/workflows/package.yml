@@ -44,13 +44,20 @@ jobs:
       - name: Install Start CLI
         run: |
           mkdir -p "$HOME/.local/bin"
-          url="$(curl -fsSL https://api.github.com/repos/Start9Labs/start-os/releases/latest | jq -r '.assets[] | select(.name == "start-cli_x86_64-linux") | .browser_download_url' | head -n 1)"
+          url="$(curl -fsSL 'https://api.github.com/repos/Start9Labs/start-technologies/releases?per_page=20' | jq -r '[.[] | select(.tag_name | startswith("start-cli/")) | .assets[] | select(.name == "start-cli_x86_64-linux") | .browser_download_url][0] // empty')"
+          if [ -z "$url" ]; then
+            echo "Unable to find start-cli_x86_64-linux in Start9Labs/start-technologies start-cli releases" >&2
+            exit 1
+          fi
           curl -fsSL "$url" -o "$HOME/.local/bin/start-cli"
           chmod +x "$HOME/.local/bin/start-cli"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Initialize StartOS developer key
         run: start-cli init-key
+
+      - name: Initialize StartOS packaging workspace
+        run: start-cli s9pk init-workspace ..
 
       - name: Verify bundled Codex OAuth fixes
         working-directory: upstream-project
