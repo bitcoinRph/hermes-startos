@@ -131,6 +131,191 @@ if [ -f "$HERMES_HOME/config.yaml" ] && [ "\${HERMES_SKIP_CONFIG_MIGRATION:-}" !
         echo "[startos] Warning: docker_config_migrate.py failed; continuing"
 fi
 
+
+# --- StartOS-local CA trust for private HTTPS/WSS services ---
+# The native Buzz adapter uses both Python HTTPS/WSS clients and the Rust buzz
+# CLI/reqwest stack. If the operator provides a combined public+private CA bundle
+# in the data volume (root profile or active named profile), export the standard
+# env vars before dashboard/gateway startup so Telegram/public HTTPS keeps public
+# trust while private relay certificates validate.
+active_profile=""
+if [ -f "$HERMES_HOME/active_profile" ]; then
+    active_profile="$(tr -d '[:space:]' < "$HERMES_HOME/active_profile" 2>/dev/null || true)"
+fi
+for ca in \
+    "$HERMES_HOME/certs/combined-public-plus-homeassistant.pem" \
+    "$HERMES_HOME/profiles/$active_profile/certs/combined-public-plus-homeassistant.pem"; do
+    if [ -s "$ca" ]; then
+        export HERMES_CA_BUNDLE="$ca"
+        export SSL_CERT_FILE="$ca"
+        export REQUESTS_CA_BUNDLE="$ca"
+        export AIOHTTP_CA_BUNDLE="$ca"
+        export NATIVE_TLS_CERT_FILE="$ca"
+        break
+    fi
+done
+
+# --- Native Buzz relay hostname pinning ---
+# Buzz community routing is hostname-bound (TLS SNI / Host). StartOS containers
+# do not reliably resolve .local mDNS names, so let the operator pin a relay
+# hostname to an IP from the data-volume .env without hardcoding site-specific
+# values into the package. Supported env values:
+#   BUZZ_RELAY_HOSTS_ENTRY=192.168.0.104 rusty-fingers.local
+#   BUZZ_RELAY_HOST_IP=192.168.0.104 with BUZZ_RELAY_URL=wss://rusty-fingers.local:50596
+read_env_value() {
+    key="$1"
+    shift
+    for env_file in "$@"; do
+        [ -f "$env_file" ] || continue
+        value="$(grep -E "^[[:space:]]*$key=" "$env_file" 2>/dev/null | tail -n 1 || true)"
+        [ -n "$value" ] || continue
+        value="\${value#*=}"
+        value="$(printf '%s' "$value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+    done
+    return 1
+}
+profile_env=""
+[ -n "$active_profile" ] && profile_env="$HERMES_HOME/profiles/$active_profile/.env"
+buzz_hosts_entry="$(read_env_value BUZZ_RELAY_HOSTS_ENTRY "$HERMES_HOME/.env" "$profile_env" || true)"
+buzz_relay_url="$(read_env_value BUZZ_RELAY_URL "$HERMES_HOME/.env" "$profile_env" || true)"
+buzz_relay_host_ip="$(read_env_value BUZZ_RELAY_HOST_IP "$HERMES_HOME/.env" "$profile_env" || true)"
+if [ -n "$buzz_hosts_entry" ]; then
+    buzz_host="$(printf '%s' "$buzz_hosts_entry" | awk '{print $2}')"
+    if [ -n "$buzz_host" ] && ! grep -Eq "[[:space:]]$buzz_host([[:space:]]|$)" /etc/hosts 2>/dev/null; then
+        printf '%s\\n' "$buzz_hosts_entry" >> /etc/hosts 2>/dev/null || true
+    fi
+elif [ -n "$buzz_relay_host_ip" ] && [ -n "$buzz_relay_url" ]; then
+    buzz_host="$(printf '%s' "$buzz_relay_url" | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#/.*##; s#:.*##')"
+    case "$buzz_host" in
+        *.local)
+            if ! grep -Eq "[[:space:]]$buzz_host([[:space:]]|$)" /etc/hosts 2>/dev/null; then
+                printf '%s %s\\n' "$buzz_relay_host_ip" "$buzz_host" >> /etc/hosts 2>/dev/null || true
+            fi
+            ;;
+    esac
+fi
+
+# --- Native Buzz gateway bootstrap ---
+# If the operator has supplied Buzz relay credentials in .env, enable the
+# bundled buzz-platform plugin and gateway platform in config.yaml. This is
+# intentionally conditional: installs without Buzz credentials remain unchanged,
+# and an explicit plugins.disabled entry for buzz-platform is respected.
+cat > /tmp/startos-buzz-bootstrap.py <<'PY'
+from pathlib import Path
+import re
+import sys
+
+import yaml
+
+home = Path('/opt/data')
+
+
+def read_env(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for line in path.read_text(errors='ignore').splitlines():
+        match = re.match(r'\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)', line)
+        if not match:
+            continue
+        key, value = match.groups()
+        out[key] = value.strip().strip('"').strip("'")
+    return out
+
+
+def load_cfg(path: Path) -> dict:
+    try:
+        cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
+    except Exception as exc:
+        print(f'[startos] Warning: cannot read {path}: {exc}', file=sys.stderr)
+        return {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def write_cfg(path: Path, cfg: dict) -> None:
+    path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding='utf-8')
+
+
+active = ''
+active_path = home / 'active_profile'
+if active_path.exists():
+    active = active_path.read_text(errors='ignore').strip()
+
+targets: list[tuple[Path, list[Path]]] = [(home / 'config.yaml', [home / '.env'])]
+if active:
+    profile_home = home / 'profiles' / active
+    targets.append((profile_home / 'config.yaml', [home / '.env', profile_home / '.env']))
+
+for config_path, env_paths in targets:
+    if not config_path.exists():
+        continue
+    env: dict[str, str] = {}
+    for env_path in env_paths:
+        env.update(read_env(env_path))
+
+    relay = env.get('BUZZ_RELAY_URL', '').strip()
+    has_key = bool(env.get('BUZZ_PRIVATE_KEY', '').strip() or env.get('BUZZ_CREDENTIALS_FILE', '').strip())
+    if not relay or not has_key:
+        continue
+
+    cfg = load_cfg(config_path)
+    plugins = cfg.setdefault('plugins', {})
+    if not isinstance(plugins, dict):
+        plugins = cfg['plugins'] = {}
+    disabled = plugins.get('disabled') or []
+    if isinstance(disabled, list) and any(item in ('buzz-platform', 'platforms/buzz') for item in disabled):
+        print(f'[startos] Buzz credentials found but buzz-platform is disabled in {config_path}; leaving disabled')
+        continue
+    enabled = plugins.get('enabled') or []
+    if not isinstance(enabled, list):
+        enabled = []
+    if 'buzz-platform' not in enabled:
+        enabled.append('buzz-platform')
+    plugins['enabled'] = enabled
+
+    gateway = cfg.setdefault('gateway', {})
+    if not isinstance(gateway, dict):
+        gateway = cfg['gateway'] = {}
+    platforms = gateway.setdefault('platforms', {})
+    if not isinstance(platforms, dict):
+        platforms = gateway['platforms'] = {}
+    buzz = platforms.setdefault('buzz', {})
+    if not isinstance(buzz, dict):
+        buzz = platforms['buzz'] = {}
+    buzz['enabled'] = True
+    extra = buzz.setdefault('extra', {})
+    if not isinstance(extra, dict):
+        extra = buzz['extra'] = {}
+    extra.setdefault('relay_url', relay)
+    if env.get('BUZZ_HOME_CHANNEL'):
+        extra.setdefault('home_channel', env['BUZZ_HOME_CHANNEL'].strip())
+    if env.get('BUZZ_CHANNELS'):
+        extra.setdefault('channels', [item.strip() for item in env['BUZZ_CHANNELS'].split(',') if item.strip()])
+    if env.get('BUZZ_TRANSPORT'):
+        extra.setdefault('transport', env['BUZZ_TRANSPORT'].strip())
+    if env.get('BUZZ_CREDENTIALS_FILE'):
+        extra.setdefault('credentials_file', env['BUZZ_CREDENTIALS_FILE'].strip())
+    if env.get('BUZZ_CLI_PATH'):
+        extra.setdefault('cli_path', env['BUZZ_CLI_PATH'].strip())
+    elif Path('/usr/local/bin/buzz').exists():
+        extra.setdefault('cli_path', '/usr/local/bin/buzz')
+
+    write_cfg(config_path, cfg)
+    print(f'[startos] Enabled native Buzz gateway in {config_path}')
+PY
+$S6_SUID hermes "$INSTALL_DIR/.venv/bin/python" /tmp/startos-buzz-bootstrap.py || \
+    echo "[startos] Warning: native Buzz bootstrap failed; continuing"
+rm -f /tmp/startos-buzz-bootstrap.py
+if [ -f "$HERMES_HOME/config.yaml" ]; then
+    chown hermes:hermes "$HERMES_HOME/config.yaml" 2>/dev/null || true
+    chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
+fi
+if [ -n "$active_profile" ] && [ -f "$HERMES_HOME/profiles/$active_profile/config.yaml" ]; then
+    chown hermes:hermes "$HERMES_HOME/profiles/$active_profile/config.yaml" 2>/dev/null || true
+    chmod 640 "$HERMES_HOME/profiles/$active_profile/config.yaml" 2>/dev/null || true
+fi
+
 # --- Ensure dashboard auth for StartOS non-loopback bind ---
 # Upstream hardening makes --insecure a no-op on 0.0.0.0 binds. StartOS exposes
 # the dashboard through its service interface, so seed the bundled password
@@ -262,6 +447,18 @@ $S6_SUID hermes "$REAL" dashboard --stop 2>/dev/null || true
 # --- Start dashboard (background) ---
 echo "[startos] Starting dashboard on 0.0.0.0:${uiPort}"
 $S6_SUID hermes "$REAL" dashboard --host 0.0.0.0 --port ${uiPort} --no-open --insecure &
+
+
+# --- Export active profile .env for gateway subprocesses ---
+# Config holds non-secret Buzz settings, but the adapter and buzz CLI still read
+# secret credentials and some TLS/env knobs from process env. Export root .env
+# first, then active profile .env so profile-local values win.
+set -a
+[ -f "$HERMES_HOME/.env" ] && . "$HERMES_HOME/.env"
+if [ -n "$active_profile" ] && [ -f "$HERMES_HOME/profiles/$active_profile/.env" ]; then
+    . "$HERMES_HOME/profiles/$active_profile/.env"
+fi
+set +a
 
 # --- Start gateway (foreground) ---
 # --replace makes the gateway take over from any orphaned instance left by a
