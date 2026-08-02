@@ -63,6 +63,13 @@ fi
 for sub in cron profiles pairing platforms/pairing; do
     [ -d "$HERMES_HOME/$sub" ] && safe_chown_tree "$HERMES_HOME/$sub"
 done
+
+# Upstream v2026.7.30 moved gateway log ownership repair earlier in boot after
+# removing restartable gateway-run chown paths for symlink TOCTOU safety. Keep
+# the equivalent StartOS warm-volume repair because root attach shells can leave
+# this directory root-owned while the top-level data volume is already hermes-owned.
+[ -d "$HERMES_HOME/logs/gateways" ] && safe_chown "$HERMES_HOME/logs/gateways"
+
 for f in \
     auth.json auth.lock .env \
     state.db state.db-shm state.db-wal \
