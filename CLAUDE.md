@@ -41,9 +41,13 @@ Current runtime model:
   bypassing the sealed venv while preserving its integrity
 - upstream is pinned via the `upstream-project` submodule (currently
   v0.19.1 / tag v2026.7.30, commit cc4cab2)
-- the package still builds against start-sdk 1.5.2 and runs on StartOS 0.4.0
-  through its compatibility layer; a port to start-sdk 2.x (the native
-  StartOS 0.4.0 SDK) is the recommended follow-up before adding new features
+- the package builds against start-sdk 2.0.9 (the native StartOS 0.4.0 SDK);
+  StartOS 0.4.0 rejects s9pks built with pre-2.x SDKs at sideload, so never
+  downgrade the SDK pin. Build plumbing comes from the SDK itself
+  (`include node_modules/@start9labs/start-sdk/s9pk.mk` in the Makefile —
+  the old vendored s9pk.mk was removed); `PACKAGE_ID` is pinned in the
+  Makefile because the SDK's awk extraction expects single-quoted manifest
+  strings and this repo formats with double quotes
 
 Open questions:
 

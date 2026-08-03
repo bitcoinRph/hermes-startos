@@ -132,13 +132,14 @@ jobs:
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
           ### Highlights
-          - **Fix:** restore compatibility with StartOS 0.4.0 (LXC runtime
-            rewrite). The boot script is now passed inline to the daemon
-            instead of being written into the subcontainer rootfs — under
-            0.4.0 that write no longer reached the mounted container tree,
-            so the daemon executed a stale pre-migration script and
-            crash-looped with a shell syntax error.
+          - **StartOS 0.4.0 native build:** rebuilt against start-sdk 2.0.9.
+            Earlier builds carried sdkVersion 1.5.2, which StartOS 0.4.0
+            rejects at sideload. Also includes the inline boot-script fix for
+            the 0.4.0 LXC runtime (no more rootfs writes that could go stale).
           - No Hermes application changes; upstream remains v0.19.1 (v2026.7.30)
+          - **Data preserved:** no data-layout changes — install as an update
+            over your existing service (do NOT uninstall first; uninstalling
+            deletes service data). Taking a backup first is recommended.
           - Immutable install tree (read-only /opt/hermes); all mutable state on the data volume
 
           ### Sideloading
