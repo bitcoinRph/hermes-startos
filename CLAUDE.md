@@ -43,11 +43,19 @@ Current runtime model:
   v0.19.1 / tag v2026.7.30, commit cc4cab2)
 - the package builds against start-sdk 2.0.9 (the native StartOS 0.4.0 SDK);
   StartOS 0.4.0 rejects s9pks built with pre-2.x SDKs at sideload, so never
-  downgrade the SDK pin. Build plumbing comes from the SDK itself
-  (`include node_modules/@start9labs/start-sdk/s9pk.mk` in the Makefile —
-  the old vendored s9pk.mk was removed); `PACKAGE_ID` is pinned in the
-  Makefile because the SDK's awk extraction expects single-quoted manifest
-  strings and this repo formats with double quotes
+  downgrade the SDK pin. The sdkVersion stamped in the packed s9pk comes from
+  this npm dependency (the bundled TS library), NOT from the build Makefile —
+  so bumping the SDK is the whole 0.4.0 fix
+- build plumbing uses the VENDORED `s9pk.mk` (`include s9pk.mk` in the
+  Makefile), not the SDK-shipped copy. The vendored file carries two
+  repo-specific fixes that must be preserved: (1) `PACKAGE_ID` is extracted
+  with a double-quote awk (`-F'"' '/id: "/'`) because this repo formats the
+  manifest with double quotes — the SDK's copy uses a single-quote awk and
+  yields an empty id (packs `_x86_64.s9pk`); (2) `start-cli` is invoked with
+  `-H http://localhost` on `list-ingredients` and `s9pk pack` so packing does
+  not try to resolve the default `dev-vm.local` host (fails in CI). Do not
+  replace it with `include node_modules/@start9labs/start-sdk/s9pk.mk` without
+  re-adding both fixes
 
 Open questions:
 
