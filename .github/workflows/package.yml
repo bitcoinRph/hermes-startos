@@ -26,6 +26,12 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      # Must run before make: the Makefile includes
+      # node_modules/@start9labs/start-sdk/s9pk.mk, so make cannot even parse
+      # the Makefile until node dependencies are installed.
+      - name: Install node dependencies
+        run: npm ci
+
       - name: Install packaging tools
         run: |
           sudo apt-get update
