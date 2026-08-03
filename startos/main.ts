@@ -1,4 +1,3 @@
-import { writeFile } from "node:fs/promises";
 import { sdk } from "./sdk";
 import type { T } from "@start9labs/start-sdk";
 import { uiPort } from "./utils";
@@ -295,16 +294,19 @@ export const main = sdk.setupMain(
       "hermes-agent",
     );
 
-    await writeFile(
-      `${hermesSub.rootfs}/opt/hermes/startos-start.sh`,
-      startupScript,
-      { mode: 0o755 },
-    );
-
     return sdk.Daemons.of(effects).addDaemon("main", {
       subcontainer: hermesSub,
       exec: {
-        command: ["/opt/hermes/startos-start.sh"],
+        // The boot script is passed inline via `sh -c` instead of being
+        // written to the subcontainer rootfs. The old pattern (host-side
+        // writeFile into `${hermesSub.rootfs}/opt/hermes/startos-start.sh`)
+        // depended on StartOS materializing the write into the overlay the
+        // container actually mounts — an implementation detail that broke in
+        // the StartOS 0.4.0 (LXC) rewrite: the daemon then executed a stale
+        // pre-migration copy of the script, crash-looping on a syntax error
+        // that existed in no released bundle. Inline argv has no file to go
+        // stale and works identically on every container runtime.
+        command: ["/bin/sh", "-c", startupScript],
         env: {
           HERMES_HOME: "/opt/data",
           PYTHONPATH: "/opt/data/pylib",
