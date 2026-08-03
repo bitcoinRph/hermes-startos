@@ -137,12 +137,15 @@ jobs:
 
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
-          ### Highlights
-          - **StartOS 0.4.0 native build:** rebuilt against start-sdk 2.0.9.
-            Earlier builds carried sdkVersion 1.5.2, which StartOS 0.4.0
-            rejects at sideload. Also includes the inline boot-script fix for
-            the 0.4.0 LXC runtime (no more rootfs writes that could go stale).
-          - No Hermes application changes; upstream remains v0.19.1 (v2026.7.30)
+          ### Highlights ("The Herald Release")
+          - Conversational voice: real-time streaming speech, on-device wake
+            words, barge-in interruption, hands-free control
+          - Research verification with grounded citations and fact-checking
+          - Agent-to-Agent communication (A2A v1.0 protocol)
+          - Desktop artifacts with live preview, plugin SDK, quick-entry windows
+          - CLI: !command instant shell execution and /diff change tracking
+          - Self-correcting tools with improved error recovery
+          - StartOS 0.4.0 native build (start-sdk 2.0.9, inline boot script)
           - **Data preserved:** no data-layout changes — install as an update
             over your existing service (do NOT uninstall first; uninstalling
             deletes service data). Taking a backup first is recommended.

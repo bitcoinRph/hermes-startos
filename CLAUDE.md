@@ -40,7 +40,7 @@ Current runtime model:
   `HERMES_LAZY_INSTALL_TARGET=/opt/data/lazy-packages` on the writable volume,
   bypassing the sealed venv while preserving its integrity
 - upstream is pinned via the `upstream-project` submodule (currently
-  v0.19.1 / tag v2026.7.30, commit cc4cab2)
+  v0.20.0 / tag v2026.8.3, commit 3c27eb62)
 - the package builds against start-sdk 2.0.9 (the native StartOS 0.4.0 SDK);
   StartOS 0.4.0 rejects s9pks built with pre-2.x SDKs at sideload, so never
   downgrade the SDK pin. The sdkVersion stamped in the packed s9pk comes from
