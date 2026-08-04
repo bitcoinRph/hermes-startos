@@ -79,6 +79,16 @@ jobs:
             echo "::warning::No DEV_KEY secret set — signing with a throwaway key. Updates signed by different keys may be rejected by StartOS. Add an ed25519 private key PEM as the DEV_KEY repo secret."
             start-cli init-key
           fi
+          # Print the PUBLIC key fingerprint (never the private key) so the
+          # signing identity is observable across runs: a stable fingerprint
+          # is the proof that consecutive releases share one signing key,
+          # which is what makes StartOS accept them as updates of each other.
+          if openssl pkey -in ~/.startos/id.key.pem -pubout -outform DER >/tmp/pub.der 2>/dev/null; then
+            echo "Signing key public fingerprint (sha256): $(openssl dgst -sha256 /tmp/pub.der | awk '{print $2}')"
+            rm -f /tmp/pub.der
+          else
+            echo "::warning::Could not read ~/.startos/id.key.pem as a PEM private key — check the DEV_KEY secret contains a full BEGIN/END PRIVATE KEY block."
+          fi
 
       - name: Initialize StartOS packaging workspace
         run: |
