@@ -150,6 +150,9 @@ jobs:
           print('Codex OAuth/model and stream guards verified')
           PY
 
+      - name: Patch upstream image with Buzz CLI
+        run: node scripts/patch-upstream-buzz-cli.mjs
+
       - name: Build package
         run: make x86_64
 
