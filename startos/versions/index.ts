@@ -23,9 +23,10 @@ import { v_0_19_1_0 } from "./v0.19.1.0";
 import { v_0_19_1_1 } from "./v0.19.1.1";
 import { v_0_19_1_2 } from "./v0.19.1.2";
 import { v_0_20_0_0 } from "./v0.20.0.0";
+import { v_0_20_0_2 } from "./v0.20.0.2";
 
 export const versionGraph = VersionGraph.of({
-  current: v_0_20_0_0,
+  current: v_0_20_0_2,
   other: [
     v_0_1_0_0,
     v_0_1_1_0,
@@ -50,5 +51,6 @@ export const versionGraph = VersionGraph.of({
     v_0_19_1_0,
     v_0_19_1_1,
     v_0_19_1_2,
+    v_0_20_0_0,
   ],
 });

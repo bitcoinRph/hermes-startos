@@ -1,10 +1,10 @@
 {
   "name": "hermes-agent-startos",
   "private": true,
-  "version": "0.20.0-0",
-  "description": "StartOS service package for Hermes Agent \u2014 self-improving AI agent from Nous Research.",
+  "version": "0.20.0-2",
+  "description": "StartOS service package for Hermes Agent - self-improving AI agent from Nous Research.",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && node scripts/check-startup-script.mjs",
     "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
     "prettier": "prettier --write .",
     "format": "prettier --check ."
