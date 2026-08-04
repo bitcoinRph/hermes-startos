@@ -59,11 +59,39 @@ jobs:
           chmod +x "$HOME/.local/bin/start-cli"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # StartOS 0.4.0 s9pks are signed, and a service only accepts updates
+      # signed consistently with what it trusts. Use the persistent DEV_KEY
+      # repo secret (ed25519 private key PEM) so every release is signed by
+      # the SAME key — the official Start9 packaging workflows do exactly
+      # this (secrets.DEV_KEY -> ~/.startos/id.key.pem). Without the secret,
+      # fall back to a throwaway key with a loud warning: those builds work
+      # for a fresh install but break the update chain.
       - name: Initialize StartOS developer key
-        run: start-cli init-key
+        env:
+          DEV_KEY: ${{ secrets.DEV_KEY }}
+        run: |
+          mkdir -p ~/.startos
+          if [ -n "$DEV_KEY" ]; then
+            printf '%s' "$DEV_KEY" > ~/.startos/id.key.pem
+            chmod 600 ~/.startos/id.key.pem
+            echo "Using persistent DEV_KEY for signing."
+          else
+            echo "::warning::No DEV_KEY secret set — signing with a throwaway key. Updates signed by different keys may be rejected by StartOS. Add an ed25519 private key PEM as the DEV_KEY repo secret."
+            start-cli init-key
+          fi
 
       - name: Initialize StartOS packaging workspace
-        run: start-cli s9pk init-workspace ..
+        run: |
+          start-cli s9pk init-workspace ..
+          # Keep the workspace build key identical to the identity key so the
+          # pack signature is stable across runs (mirrors the official
+          # Start9 build workflow).
+          if [ -f ~/.startos/id.key.pem ]; then
+            mkdir -p ../.startos .startos 2>/dev/null || true
+            for d in ../.startos .startos; do
+              [ -d "$d" ] && cp ~/.startos/id.key.pem "$d/build.key.pem" 2>/dev/null || true
+            done
+          fi
 
       - name: Verify bundled Codex OAuth fixes
         working-directory: upstream-project
