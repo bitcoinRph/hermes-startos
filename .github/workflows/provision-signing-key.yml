@@ -1,0 +1,114 @@
+name: Provision signing key
+
+# One-time (and later, key-rotation) helper.
+#
+# Generates the package signing key INSIDE the runner and writes it straight
+# into this repository's Actions secrets as DEV_KEY. The private key is
+# created on a throwaway VM, never printed, and shredded before the job
+# ends — it is never exposed in logs, artifacts, or to any human.
+#
+# Why this exists: StartOS 0.4.0 s9pks are signed, and a device only accepts
+# an update that is signed consistently with the release it already trusts.
+# That requires ONE stable signing key across builds (see package.yml), which
+# means the key must live in a secret rather than being minted per run.
+#
+# Prerequisite: a fine-grained Personal Access Token stored as the repo
+# secret PROVISION_PAT, scoped to THIS repository only, with:
+#     Repository permissions -> Secrets: Read and write
+# Delete the PAT (and this secret) once the run succeeds — it is not needed
+# again until you rotate the key.
+#
+# Running this a second time REPLACES DEV_KEY with a fresh key. Only do that
+# deliberately: releases signed by the old key and the new key are not
+# interchangeable, so a rotation means the next update may need a fresh
+# install rather than an in-place update.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate signing key and store it as the DEV_KEY secret
+        env:
+          # Deliberately NOT the default GITHUB_TOKEN: it cannot write Actions
+          # secrets. This must be a PAT with Secrets: Read and write.
+          PROVISION_PAT: ${{ secrets.PROVISION_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PROVISION_PAT:-}" ]; then
+            echo "::error::PROVISION_PAT secret is not set. Create a fine-grained PAT scoped to this repo with 'Secrets: Read and write', save it as the PROVISION_PAT repo secret, then re-run."
+            exit 1
+          fi
+
+          python3 -m pip install --quiet --disable-pip-version-check pynacl >/dev/null
+
+          # Generate the key in a private temp dir. Never echoed.
+          workdir="$(mktemp -d)"
+          chmod 700 "$workdir"
+          openssl genpkey -algorithm ed25519 -out "$workdir/dev.key.pem"
+          chmod 600 "$workdir/dev.key.pem"
+
+          # Public fingerprint IS safe to print, and is the value you use to
+          # confirm that later package builds sign with this same key.
+          openssl pkey -in "$workdir/dev.key.pem" -pubout -outform DER \
+            -out "$workdir/pub.der"
+          fingerprint="$(openssl dgst -sha256 "$workdir/pub.der" | awk '{print $2}')"
+
+          KEY_PATH="$workdir/dev.key.pem" REPO="$REPO" python3 <<'PY'
+          import base64, json, os, urllib.request
+          from nacl import encoding, public
+
+          repo = os.environ["REPO"]
+          token = os.environ["PROVISION_PAT"]
+          key_pem = open(os.environ["KEY_PATH"], "rb").read()
+
+          def api(path, method="GET", payload=None):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/{path}",
+                  method=method,
+                  data=json.dumps(payload).encode() if payload is not None else None,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "Content-Type": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(req) as resp:
+                  body = resp.read()
+                  return resp.status, (json.loads(body) if body else None)
+
+          # Fetch the repo's Actions public key and seal the private key to it,
+          # so the secret is encrypted client-side before it ever leaves the VM.
+          _, pk = api("actions/secrets/public-key")
+          sealed = public.SealedBox(
+              public.PublicKey(pk["key"].encode(), encoding.Base64Encoder())
+          ).encrypt(key_pem)
+
+          status, _ = api(
+              "actions/secrets/DEV_KEY",
+              method="PUT",
+              payload={
+                  "encrypted_value": base64.b64encode(sealed).decode(),
+                  "key_id": pk["key_id"],
+              },
+          )
+          print(f"DEV_KEY secret {'created' if status == 201 else 'updated'} (HTTP {status}).")
+          PY
+
+          # Destroy the on-disk copy. The only surviving copy is the encrypted
+          # GitHub secret.
+          shred -u "$workdir/dev.key.pem" 2>/dev/null || rm -f "$workdir/dev.key.pem"
+          rm -rf "$workdir"
+
+          echo ""
+          echo "Signing key public fingerprint (sha256): $fingerprint"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Delete the PROVISION_PAT secret and revoke the PAT — not needed again until you rotate."
+          echo "  2. Run the 'Package' workflow on master."
+          echo "  3. Confirm its 'Initialize StartOS developer key' step prints this same fingerprint."
