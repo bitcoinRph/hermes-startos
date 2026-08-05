@@ -3,3 +3,7 @@ dist
 javascript
 .DS_Store
 *.s9pk
+
+# Built by CI from block/buzz; never commit the binary.
+/assets/buzz
+/assets/buzz.rev

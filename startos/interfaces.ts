@@ -5,7 +5,7 @@ import { uiPort } from "./utils";
 export const setInterfaces = sdk.setupInterfaces(
   async ({ effects }: { effects: T.Effects }) => {
     const uiMulti = sdk.MultiHost.of(effects, "ui-multi");
-    const uiMultiOrigin = await uiMulti.bindPort(9119, {
+    const uiMultiOrigin = await uiMulti.bindPort(uiPort, {
       protocol: "http",
     });
 

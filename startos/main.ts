@@ -137,6 +137,200 @@ if [ -f "$HERMES_HOME/config.yaml" ] && [ "\${HERMES_SKIP_CONFIG_MIGRATION:-}" !
         echo "[startos] Warning: docker_config_migrate.py failed; continuing"
 fi
 
+# --- StartOS-local CA trust for private HTTPS/WSS services ---
+# The native Buzz adapter uses both Python HTTPS/WSS clients and the Rust buzz
+# CLI/reqwest stack. If the operator provides a combined public+private CA bundle
+# in the data volume (root profile or active named profile), export the standard
+# env vars before dashboard/gateway startup so public HTTPS keeps public trust
+# while private relay certificates validate.
+active_profile=""
+if [ -f "$HERMES_HOME/active_profile" ]; then
+    active_profile="$(tr -d '[:space:]' < "$HERMES_HOME/active_profile" 2>/dev/null || true)"
+fi
+for ca in \\
+    "$HERMES_HOME/certs/combined-public-plus-homeassistant.pem" \\
+    "$HERMES_HOME/profiles/$active_profile/certs/combined-public-plus-homeassistant.pem"; do
+    if [ -s "$ca" ]; then
+        export HERMES_CA_BUNDLE="$ca"
+        export SSL_CERT_FILE="$ca"
+        export REQUESTS_CA_BUNDLE="$ca"
+        export AIOHTTP_CA_BUNDLE="$ca"
+        export NATIVE_TLS_CERT_FILE="$ca"
+        break
+    fi
+done
+
+# --- Buzz relay hostname pinning ---
+# Buzz community routing is hostname-bound (TLS SNI / Host). StartOS LXC
+# containers do not resolve .local mDNS names, so let the operator pin the
+# relay hostname to an IP from the data-volume .env without hardcoding
+# site-specific values into the package:
+#   BUZZ_RELAY_HOSTS_ENTRY=192.168.0.104 relay-host.local
+#   or BUZZ_RELAY_HOST_IP=192.168.0.104 alongside BUZZ_RELAY_URL
+read_env_value() {
+    key="$1"
+    shift
+    for env_file in "$@"; do
+        [ -f "$env_file" ] || continue
+        value="$(grep -E "^[[:space:]]*$key=" "$env_file" 2>/dev/null | tail -n 1 || true)"
+        [ -n "$value" ] || continue
+        value="\${value#*=}"
+        value="$(printf '%s' "$value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+    done
+    return 1
+}
+profile_env=""
+[ -n "$active_profile" ] && profile_env="$HERMES_HOME/profiles/$active_profile/.env"
+buzz_hosts_entry="$(read_env_value BUZZ_RELAY_HOSTS_ENTRY "$HERMES_HOME/.env" "$profile_env" || true)"
+buzz_relay_url="$(read_env_value BUZZ_RELAY_URL "$HERMES_HOME/.env" "$profile_env" || true)"
+buzz_relay_host_ip="$(read_env_value BUZZ_RELAY_HOST_IP "$HERMES_HOME/.env" "$profile_env" || true)"
+if [ -n "$buzz_hosts_entry" ]; then
+    buzz_host="$(printf '%s' "$buzz_hosts_entry" | awk '{print $2}')"
+    if [ -n "$buzz_host" ] && ! grep -Eq "[[:space:]]$buzz_host([[:space:]]|$)" /etc/hosts 2>/dev/null; then
+        printf '%s\\n' "$buzz_hosts_entry" >> /etc/hosts 2>/dev/null || true
+    fi
+elif [ -n "$buzz_relay_host_ip" ] && [ -n "$buzz_relay_url" ]; then
+    buzz_host="$(printf '%s' "$buzz_relay_url" | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#/.*##; s#:.*##')"
+    case "$buzz_host" in
+        *.local)
+            if ! grep -Eq "[[:space:]]$buzz_host([[:space:]]|$)" /etc/hosts 2>/dev/null; then
+                printf '%s %s\\n' "$buzz_relay_host_ip" "$buzz_host" >> /etc/hosts 2>/dev/null || true
+            fi
+            ;;
+    esac
+fi
+
+# --- Buzz platform bootstrap ---
+# If the operator has supplied Buzz relay credentials in .env, enable the
+# bundled buzz-platform plugin and gateway platform in config.yaml. This is
+# intentionally conditional: installs without Buzz credentials remain
+# unchanged, and an explicit plugins.disabled entry for buzz-platform is
+# respected. Also heals the stale cli_path the retired canary builds wrote
+# (/usr/local/bin/buzz no longer exists in the image; the daemon env pins
+# BUZZ_CLI_PATH to the packaged asset instead, which the adapter prefers).
+cat > /tmp/startos-buzz-bootstrap.py <<'PY'
+from pathlib import Path
+import os
+import sys
+
+import yaml
+
+home = Path('/opt/data')
+
+def load_env(path):
+    out = {}
+    if not path.is_file():
+        return out
+    for line in path.read_text(errors='ignore').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        out[key.strip()] = value.strip().strip('"').strip("'")
+    return out
+
+active = ''
+ap = home / 'active_profile'
+if ap.is_file():
+    active = ap.read_text(errors='ignore').strip()
+
+targets = [(home / 'config.yaml', home / '.env')]
+if active:
+    pdir = home / 'profiles' / active
+    targets.append((pdir / 'config.yaml', pdir / '.env'))
+
+for config_path, env_path in targets:
+    if not config_path.is_file():
+        continue
+    env = load_env(home / '.env')
+    env.update(load_env(env_path))
+    relay = env.get('BUZZ_RELAY_URL', '').strip()
+    has_key = bool(env.get('BUZZ_PRIVATE_KEY', '').strip() or env.get('BUZZ_CREDENTIALS_FILE', '').strip())
+
+    try:
+        cfg = yaml.safe_load(config_path.read_text()) or {}
+    except Exception as exc:
+        print(f'[startos] Warning: could not parse {config_path}: {exc}', file=sys.stderr)
+        continue
+    if not isinstance(cfg, dict):
+        continue
+
+    changed = False
+
+    # Heal the retired canary's stale cli_path regardless of enablement.
+    extra = (((cfg.get('gateway') or {}).get('platforms') or {}).get('buzz') or {}).get('extra')
+    if isinstance(extra, dict):
+        stale = str(extra.get('cli_path', '') or '')
+        if stale and not Path(stale).is_file():
+            del extra['cli_path']
+            changed = True
+            print(f'[startos] Removed stale buzz cli_path {stale} from {config_path}')
+
+    if relay and has_key:
+        plugins = cfg.setdefault('plugins', {})
+        if not isinstance(plugins, dict):
+            plugins = cfg['plugins'] = {}
+        disabled = plugins.get('disabled') or []
+        if isinstance(disabled, list) and any(
+            item in ('buzz-platform', 'platforms/buzz') for item in disabled
+        ):
+            print(f'[startos] Buzz credentials found but buzz-platform is disabled in {config_path}; leaving disabled')
+        else:
+            enabled = plugins.get('enabled') or []
+            if not isinstance(enabled, list):
+                enabled = []
+            if 'buzz-platform' not in enabled:
+                enabled.append('buzz-platform')
+                changed = True
+            plugins['enabled'] = enabled
+
+            gateway = cfg.setdefault('gateway', {})
+            if not isinstance(gateway, dict):
+                gateway = cfg['gateway'] = {}
+            platforms = gateway.setdefault('platforms', {})
+            if not isinstance(platforms, dict):
+                platforms = gateway['platforms'] = {}
+            buzz = platforms.setdefault('buzz', {})
+            if not isinstance(buzz, dict):
+                buzz = platforms['buzz'] = {}
+            if buzz.get('enabled') is not True:
+                buzz['enabled'] = True
+                changed = True
+            bextra = buzz.setdefault('extra', {})
+            if not isinstance(bextra, dict):
+                bextra = buzz['extra'] = {}
+            if 'relay_url' not in bextra:
+                bextra['relay_url'] = relay
+                changed = True
+            if env.get('BUZZ_HOME_CHANNEL') and 'home_channel' not in bextra:
+                bextra['home_channel'] = env['BUZZ_HOME_CHANNEL'].strip()
+                changed = True
+            if env.get('BUZZ_CHANNELS') and 'channels' not in bextra:
+                bextra['channels'] = [c.strip() for c in env['BUZZ_CHANNELS'].split(',') if c.strip()]
+                changed = True
+            if env.get('BUZZ_TRANSPORT') and 'transport' not in bextra:
+                bextra['transport'] = env['BUZZ_TRANSPORT'].strip()
+                changed = True
+            if env.get('BUZZ_CREDENTIALS_FILE') and 'credentials_file' not in bextra:
+                bextra['credentials_file'] = env['BUZZ_CREDENTIALS_FILE'].strip()
+                changed = True
+            # Deliberately do NOT write cli_path: the daemon env pins
+            # BUZZ_CLI_PATH, and a baked path is exactly how the canary
+            # left stale state behind.
+
+    if changed:
+        config_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding='utf-8')
+        print(f'[startos] Buzz configuration updated in {config_path}')
+PY
+$S6_SUID hermes "$INSTALL_DIR/.venv/bin/python" /tmp/startos-buzz-bootstrap.py || \\
+    echo "[startos] Warning: Buzz bootstrap failed; continuing"
+rm -f /tmp/startos-buzz-bootstrap.py
+if [ -f "$HERMES_HOME/config.yaml" ]; then
+    chown hermes:hermes "$HERMES_HOME/config.yaml" 2>/dev/null || true
+    chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
+fi
+
 # --- Ensure dashboard auth for StartOS non-loopback bind ---
 # Upstream hardening makes --insecure a no-op on 0.0.0.0 binds. StartOS exposes
 # the dashboard through its service interface, so seed the bundled password
@@ -285,12 +479,20 @@ export const main = sdk.setupMain(
     const hermesSub = await sdk.SubContainer.of(
       effects,
       { imageId: "main" },
-      sdk.Mounts.of().mountVolume({
-        volumeId: "main",
-        subpath: null,
-        mountpoint: "/opt/data",
-        readonly: false,
-      }),
+      sdk.Mounts.of()
+        .mountVolume({
+          volumeId: "main",
+          subpath: null,
+          mountpoint: "/opt/data",
+          readonly: false,
+        })
+        // Read-only packaged assets. Carries the buzz CLI binary (built in
+        // CI from block/buzz) that the Buzz platform adapter shells out to
+        // for outbound messages — the upstream image does not ship it.
+        .mountAssets({
+          subpath: null,
+          mountpoint: "/opt/package-assets",
+        }),
       "hermes-agent",
     );
 
@@ -309,7 +511,6 @@ export const main = sdk.setupMain(
         command: ["/bin/sh", "-c", startupScript],
         env: {
           HERMES_HOME: "/opt/data",
-          PYTHONPATH: "/opt/data/pylib",
           // 0.16.0 redirects bare `gateway run` to s6 supervision when it
           // detects the s6 image; we bypass s6 entirely, so opt out.
           HERMES_GATEWAY_NO_SUPERVISE: "1",
@@ -318,6 +519,19 @@ export const main = sdk.setupMain(
           HERMES_TUI_DIR: "/opt/hermes/ui-tui",
           HERMES_WEB_DIST: "/opt/hermes/hermes_cli/web_dist",
           PLAYWRIGHT_BROWSERS_PATH: "/opt/hermes/.playwright",
+          // Dockerfile:57 — without this, Python block-buffers stdout under
+          // StartOS's pipe and crash logs arrive late or not at all.
+          PYTHONUNBUFFERED: "1",
+          // Dockerfile:420 — the agent shells out constantly ("hermes ...",
+          // user tools in /opt/data/.local/bin, `buzz` discovery via which);
+          // pin the image PATH so subprocesses resolve the same commands as
+          // under the native entrypoint.
+          PATH: "/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          // Outbound Buzz messages shell out to this binary (packaged as a
+          // read-only asset; see mountAssets above). Env wins over any
+          // cli_path in config.yaml, so this also overrides the stale
+          // /usr/local/bin/buzz the retired canary builds wrote to volumes.
+          BUZZ_CLI_PATH: "/opt/package-assets/buzz",
           // 0.17.0 makes /opt/hermes immutable (root-owned, read-only).
           // Pin the Dockerfile ENV that keeps the runtime off that tree:
           // no lazy pip installs into the read-only .venv, no .pyc writes,
