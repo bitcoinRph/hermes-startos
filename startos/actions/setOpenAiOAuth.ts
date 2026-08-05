@@ -65,11 +65,21 @@ export const setOpenAiOAuth = sdk.Action.withInput(
   },
 
   async ({ effects, input }) => {
-    const now = new Date().toISOString().replace("+00:00", "Z");
+    const now = new Date().toISOString();
 
+    // Read-modify-write, mirroring upstream's _store_provider_state:
+    // auth.json holds ALL provider credentials (nous, openai-codex, ...),
+    // so replacing the whole file here would destroy the user's other
+    // providers — including the primary Nous session. Only this provider's
+    // entry is touched, and active_provider is only set when nothing has
+    // claimed it yet, so adding Codex never silently switches an existing
+    // active provider.
+    const existing = (await authJson.read((a) => a).once()) ?? {};
     await authJson.write(effects, {
-      version: 1,
+      ...existing,
+      version: existing.version ?? 1,
       providers: {
+        ...(existing.providers ?? {}),
         "openai-codex": {
           tokens: {
             access_token: input.accessToken,
@@ -79,14 +89,14 @@ export const setOpenAiOAuth = sdk.Action.withInput(
           auth_mode: "chatgpt",
         },
       },
-      active_provider: "openai-codex",
+      active_provider: existing.active_provider ?? "openai-codex",
     });
 
     return {
       version: "1" as const,
       title: "OpenAI OAuth Credentials Saved",
       message:
-        "Tokens written to auth.json. Restart Hermes for the change to take effect if it is currently running.",
+        "Tokens written to auth.json (other providers preserved). Restart Hermes for the change to take effect if it is currently running.",
       result: {
         type: "single" as const,
         name: "Status",

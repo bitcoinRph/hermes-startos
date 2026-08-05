@@ -39,6 +39,17 @@ Current runtime model:
 - optional backend SDKs (Firecrawl, Exa, etc.) install to
   `HERMES_LAZY_INSTALL_TARGET=/opt/data/lazy-packages` on the writable volume,
   bypassing the sealed venv while preserving its integrity
+- the Buzz platform's `buzz` CLI (required for all outbound Buzz messages;
+  not shipped by the upstream image) is built in CI from a pinned block/buzz
+  commit into `assets/buzz` and mounted read-only at `/opt/package-assets`;
+  the daemon env pins `BUZZ_CLI_PATH=/opt/package-assets/buzz`, which the
+  adapter prefers over any `cli_path` in config.yaml — this also overrides
+  the stale `/usr/local/bin/buzz` path the retired canary builds wrote into
+  volume configs (the boot-script bootstrap also deletes that stale key).
+  The boot script conditionally enables buzz-platform when relay credentials
+  exist in `.env`, pins LAN relay hostnames into /etc/hosts
+  (`BUZZ_RELAY_HOSTS_ENTRY` / `BUZZ_RELAY_HOST_IP`), and exports private-CA
+  trust env vars when a combined CA bundle is present on the volume
 - upstream is pinned via the `upstream-project` submodule (currently
   v0.20.0 / tag v2026.8.3, commit 3c27eb62)
 - the package builds against start-sdk 2.0.9 (the native StartOS 0.4.0 SDK);

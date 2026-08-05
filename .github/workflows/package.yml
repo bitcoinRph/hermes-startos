@@ -103,6 +103,30 @@ jobs:
             done
           fi
 
+      # The Hermes Buzz platform adapter shells out to the `buzz` CLI for all
+      # outbound messages; the upstream image does not ship it. Build it from
+      # block/buzz (pinned commit for reproducibility) and package it as a
+      # static asset the daemon mounts read-only at /opt/package-assets.
+      # x86_64-only, matching the arch this workflow packs.
+      - name: Build buzz CLI asset
+        env:
+          BUZZ_REPO: https://github.com/block/buzz.git
+          BUZZ_REV: 8342dfcc5890b81a269a8ec3db73a8a56f76ce79
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none "$BUZZ_REPO" /tmp/buzz-src
+          git -C /tmp/buzz-src checkout "$BUZZ_REV"
+          cargo build --release -p buzz-cli --manifest-path /tmp/buzz-src/Cargo.toml
+          bin="$(find /tmp/buzz-src/target/release -maxdepth 1 -type f -executable -name 'buzz*' ! -name '*.d' | head -n 1)"
+          if [ -z "$bin" ]; then
+            echo "::error::buzz CLI binary not found after cargo build"
+            exit 1
+          fi
+          install -m 0755 "$bin" assets/buzz
+          echo "$BUZZ_REV" > assets/buzz.rev
+          ./assets/buzz --version 2>/dev/null || ./assets/buzz --help >/dev/null 2>&1 || true
+          echo "Packaged $(basename "$bin") ($(du -h assets/buzz | cut -f1)) from block/buzz@$BUZZ_REV"
+
       - name: Verify bundled Codex OAuth fixes
         working-directory: upstream-project
         run: |
@@ -175,14 +199,19 @@ jobs:
 
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
-          ### Highlights ("The Herald Release")
-          - Conversational voice: real-time streaming speech, on-device wake
-            words, barge-in interruption, hands-free control
-          - Research verification with grounded citations and fact-checking
-          - Agent-to-Agent communication (A2A v1.0 protocol)
-          - Desktop artifacts with live preview, plugin SDK, quick-entry windows
-          - CLI: !command instant shell execution and /diff change tracking
-          - Self-correcting tools with improved error recovery
+          ### Highlights
+          - **Buzz platform enabled end to end:** the buzz CLI ships as a
+            packaged asset (built from block/buzz) and the adapter finds it
+            via BUZZ_CLI_PATH; stale canary cli_path entries are healed;
+            LAN relay hostname pinning and private-CA trust restored; Buzz
+            auto-enables when relay credentials exist in .env
+          - **Fix:** "Set OpenAI OAuth Credentials" now merges into
+            auth.json instead of overwriting it (previously destroyed other
+            provider credentials, including the Nous session)
+          - Daemon env pins PYTHONUNBUFFERED and the image PATH (immediate
+            logs; correct subprocess command resolution)
+          - Upstream Hermes v0.20.0 "The Herald Release" (voice, research
+            verification, A2A v1.0, desktop artifacts, !command and /diff)
           - StartOS 0.4.0 native build (start-sdk 2.0.9, inline boot script)
           - **Data preserved:** no data-layout changes — install as an update
             over your existing service (do NOT uninstall first; uninstalling
