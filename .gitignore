@@ -7,3 +7,5 @@ javascript
 # Built by CI from block/buzz; never commit the binary.
 /assets/buzz
 /assets/buzz.rev
+/assets/start-cli
+/assets/start-cli.rev

@@ -129,6 +129,25 @@ if [ -f "$HERMES_HOME/config.yaml" ]; then
     chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
 fi
 
+# --- Seed non-secret StartOS CLI config ---
+# start-cli is packaged as a read-only asset and placed on PATH below. Keep its
+# auth state on the persistent data volume and seed only a local host profile.
+# No credentials or tokens are embedded; the operator must run
+# Run start-cli auth login from inside Hermes before privileged commands work.
+$S6_SUID hermes mkdir -p "$HERMES_HOME/.startos"
+if [ ! -f "$HERMES_HOME/.startos/config.yaml" ]; then
+    $S6_SUID hermes sh -c 'cat > "$1"' sh "$HERMES_HOME/.startos/config.yaml" <<'YAML'
+schema: 1
+host:
+  default: http://10.0.3.1
+registry:
+  default: https://registry.start9.com
+YAML
+fi
+chown -R hermes:hermes "$HERMES_HOME/.startos" 2>/dev/null || true
+chmod 700 "$HERMES_HOME/.startos" 2>/dev/null || true
+[ -f "$HERMES_HOME/.startos/config.yaml" ] && chmod 600 "$HERMES_HOME/.startos/config.yaml" 2>/dev/null || true
+
 # --- Migrate persisted config schema ---
 # Image upgrades replace code under $INSTALL_DIR but preserve the volume;
 # run the same non-interactive migrations the upstream stage2 hook runs.
@@ -550,10 +569,11 @@ export const main = sdk.setupMain(
           // StartOS's pipe and crash logs arrive late or not at all.
           PYTHONUNBUFFERED: "1",
           // Dockerfile:420 — the agent shells out constantly ("hermes ...",
-          // user tools in /opt/data/.local/bin, `buzz` discovery via which);
+          // user tools in /opt/data/.local/bin, package assets, `buzz`
+          // discovery via which);
           // pin the image PATH so subprocesses resolve the same commands as
           // under the native entrypoint.
-          PATH: "/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          PATH: "/opt/package-assets:/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
           // Outbound Buzz messages shell out to this binary (packaged as a
           // read-only asset; see mountAssets above). Env wins over any
           // cli_path in config.yaml, so this also overrides the stale
