@@ -247,7 +247,7 @@ def heal_buzz_cli_env(path):
             _, _, raw = stripped.partition('=')
             value = raw.strip().strip('"').strip("'")
             if value != '/opt/package-assets/buzz':
-                line = 'BUZZ_CLI_PATH=/opt/package-assets/buzz\n'
+                line = 'BUZZ_CLI_PATH=/opt/package-assets/buzz\\n'
                 changed = True
         healed.append(line)
 
