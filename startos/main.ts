@@ -230,6 +230,31 @@ def load_env(path):
         out[key.strip()] = value.strip().strip('"').strip("'")
     return out
 
+def heal_buzz_cli_env(path):
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(errors='ignore').splitlines(keepends=True)
+    except Exception as exc:
+        print(f'[startos] Warning: could not read {path}: {exc}', file=sys.stderr)
+        return
+
+    changed = False
+    healed = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('BUZZ_CLI_PATH='):
+            _, _, raw = stripped.partition('=')
+            value = raw.strip().strip('"').strip("'")
+            if value != '/opt/package-assets/buzz':
+                line = 'BUZZ_CLI_PATH=/opt/package-assets/buzz\n'
+                changed = True
+        healed.append(line)
+
+    if changed:
+        path.write_text(''.join(healed), encoding='utf-8')
+        print(f'[startos] Repointed BUZZ_CLI_PATH to /opt/package-assets/buzz in {path}')
+
 active = ''
 ap = home / 'active_profile'
 if ap.is_file():
@@ -243,6 +268,8 @@ if active:
 for config_path, env_path in targets:
     if not config_path.is_file():
         continue
+    heal_buzz_cli_env(home / '.env')
+    heal_buzz_cli_env(env_path)
     env = load_env(home / '.env')
     env.update(load_env(env_path))
     relay = env.get('BUZZ_RELAY_URL', '').strip()
