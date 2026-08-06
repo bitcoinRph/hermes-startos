@@ -58,6 +58,8 @@ jobs:
           curl -fsSL "$url" -o "$HOME/.local/bin/start-cli"
           chmod +x "$HOME/.local/bin/start-cli"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          install -m 0755 "$HOME/.local/bin/start-cli" assets/start-cli
+          "$HOME/.local/bin/start-cli" --version > assets/start-cli.rev
 
       # StartOS 0.4.0 s9pks are signed, and a service only accepts updates
       # signed consistently with what it trusts. Use the persistent DEV_KEY
@@ -205,6 +207,10 @@ jobs:
             via BUZZ_CLI_PATH; stale canary cli_path entries are healed;
             LAN relay hostname pinning and private-CA trust restored; Buzz
             auto-enables when relay credentials exist in .env
+          - **StartOS CLI available with manual auth:** start-cli ships as a
+            packaged asset on PATH with a non-secret local host config; no
+            credentials are embedded, so the operator must run
+            start-cli auth login from inside Hermes before server actions work
           - **Fix:** "Set OpenAI OAuth Credentials" now merges into
             auth.json instead of overwriting it (previously destroyed other
             provider credentials, including the Nous session)

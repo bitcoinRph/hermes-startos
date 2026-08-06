@@ -129,6 +129,25 @@ if [ -f "$HERMES_HOME/config.yaml" ]; then
     chmod 640 "$HERMES_HOME/config.yaml" 2>/dev/null || true
 fi
 
+# --- Seed non-secret StartOS CLI config ---
+# start-cli is packaged as a read-only asset and placed on PATH below. Keep its
+# auth state on the persistent data volume and seed only a local host profile.
+# No credentials or tokens are embedded; the operator must run
+# Run start-cli auth login from inside Hermes before privileged commands work.
+$S6_SUID hermes mkdir -p "$HERMES_HOME/.startos"
+if [ ! -f "$HERMES_HOME/.startos/config.yaml" ]; then
+    $S6_SUID hermes sh -c 'cat > "$1"' sh "$HERMES_HOME/.startos/config.yaml" <<'YAML'
+schema: 1
+host:
+  default: http://10.0.3.1
+registry:
+  default: https://registry.start9.com
+YAML
+fi
+chown -R hermes:hermes "$HERMES_HOME/.startos" 2>/dev/null || true
+chmod 700 "$HERMES_HOME/.startos" 2>/dev/null || true
+[ -f "$HERMES_HOME/.startos/config.yaml" ] && chmod 600 "$HERMES_HOME/.startos/config.yaml" 2>/dev/null || true
+
 # --- Migrate persisted config schema ---
 # Image upgrades replace code under $INSTALL_DIR but preserve the volume;
 # run the same non-interactive migrations the upstream stage2 hook runs.
@@ -230,6 +249,31 @@ def load_env(path):
         out[key.strip()] = value.strip().strip('"').strip("'")
     return out
 
+def heal_buzz_cli_env(path):
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(errors='ignore').splitlines(keepends=True)
+    except Exception as exc:
+        print(f'[startos] Warning: could not read {path}: {exc}', file=sys.stderr)
+        return
+
+    changed = False
+    healed = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('BUZZ_CLI_PATH='):
+            _, _, raw = stripped.partition('=')
+            value = raw.strip().strip('"').strip("'")
+            if value != '/opt/package-assets/buzz':
+                line = 'BUZZ_CLI_PATH=/opt/package-assets/buzz\\n'
+                changed = True
+        healed.append(line)
+
+    if changed:
+        path.write_text(''.join(healed), encoding='utf-8')
+        print(f'[startos] Repointed BUZZ_CLI_PATH to /opt/package-assets/buzz in {path}')
+
 active = ''
 ap = home / 'active_profile'
 if ap.is_file():
@@ -243,6 +287,8 @@ if active:
 for config_path, env_path in targets:
     if not config_path.is_file():
         continue
+    heal_buzz_cli_env(home / '.env')
+    heal_buzz_cli_env(env_path)
     env = load_env(home / '.env')
     env.update(load_env(env_path))
     relay = env.get('BUZZ_RELAY_URL', '').strip()
@@ -463,6 +509,24 @@ $S6_SUID hermes "$REAL" dashboard --stop 2>/dev/null || true
 echo "[startos] Starting dashboard on 0.0.0.0:${uiPort}"
 $S6_SUID hermes "$REAL" dashboard --host 0.0.0.0 --port ${uiPort} --no-open --insecure &
 
+# --- Start agent buzz bridge (background) ---
+# The bridge lives on the persistent data volume so its state survives package
+# updates, but the package refreshes the executable files on boot. It runs two
+# Buzz identities: Herman and Goku. Each watcher has its own state/logs and is
+# mention-gated to avoid accidental thread noise or agent reply loops.
+if [ -d "/opt/package-assets/agent-buzz-bridge" ]; then
+    mkdir -p "$HERMES_HOME/agent-buzz-bridge"
+    cp /opt/package-assets/agent-buzz-bridge/bridge.mjs "$HERMES_HOME/agent-buzz-bridge/bridge.mjs"
+    cp /opt/package-assets/agent-buzz-bridge/run-agent-buzz-bridge.sh "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh"
+    chown -R hermes:hermes "$HERMES_HOME/agent-buzz-bridge" 2>/dev/null || true
+    chmod 755 "$HERMES_HOME/agent-buzz-bridge/bridge.mjs" "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh" 2>/dev/null || true
+    for pid in $(pgrep -f "[a]gent-buzz-bridge/bridge.mjs gateway" 2>/dev/null || true); do
+        kill "$pid" 2>/dev/null || true
+    done
+    "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh" start || \\
+        echo "[startos] Warning: agent buzz bridge failed to start; continuing"
+fi
+
 # --- Start gateway (foreground) ---
 # --replace makes the gateway take over from any orphaned instance left by a
 # prior boot (it SIGTERM/SIGKILLs the recorded PID, clears the pid file, and
@@ -523,10 +587,11 @@ export const main = sdk.setupMain(
           // StartOS's pipe and crash logs arrive late or not at all.
           PYTHONUNBUFFERED: "1",
           // Dockerfile:420 — the agent shells out constantly ("hermes ...",
-          // user tools in /opt/data/.local/bin, `buzz` discovery via which);
+          // user tools in /opt/data/.local/bin, package assets, `buzz`
+          // discovery via which);
           // pin the image PATH so subprocesses resolve the same commands as
           // under the native entrypoint.
-          PATH: "/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          PATH: "/opt/package-assets:/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
           // Outbound Buzz messages shell out to this binary (packaged as a
           // read-only asset; see mountAssets above). Env wins over any
           // cli_path in config.yaml, so this also overrides the stale
