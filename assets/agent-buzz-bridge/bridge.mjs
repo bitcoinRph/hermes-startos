@@ -23,6 +23,9 @@ const DEFAULT_CONFIG = {
   relayReplyMaxChars: 8000,
   postWorkingReceipts: process.env.AGENT_BUZZ_WORKING_RECEIPTS !== '0',
   queueMax: 8,
+  directoryRefreshMs: Number(process.env.AGENT_BUZZ_DIRECTORY_REFRESH_MS || 30_000),
+  membershipPageLimit: Number(process.env.AGENT_BUZZ_MEMBERSHIP_LIMIT || 500),
+  watchAllChannels: process.env.AGENT_BUZZ_WATCH_ALL_CHANNELS === '1',
   allowedAuthorPubkeys: (process.env.AGENT_BUZZ_ALLOWED_PUBKEYS || process.env.BUZZ_HERMAN_ALLOWED_PUBKEYS || '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
@@ -117,6 +120,24 @@ export function channelFromMetadataEvent(event) {
   const name = extractTag(event.tags, 'name') || id;
   const about = extractTag(event.tags, 'about') || '';
   return { id, name, about, event_id: event.id };
+}
+
+export function channelIdFromMembersEvent(event) {
+  return extractTag(event.tags, 'd') || extractTag(event.tags, 'h');
+}
+
+export function channelMembersFromEvent(event) {
+  const channelId = channelIdFromMembersEvent(event);
+  if (!channelId) return null;
+  const members = [];
+  for (const tag of event.tags || []) {
+    if (!Array.isArray(tag) || tag[0] !== 'p' || !tag[1]) continue;
+    members.push({
+      pubkey: String(tag[1]).toLowerCase(),
+      role: tag[3] || 'member',
+    });
+  }
+  return { channelId, members, event_id: event.id };
 }
 
 function oneLine(text, max = 240) {
@@ -484,6 +505,40 @@ async function listChannels(relay) {
   return channels;
 }
 
+async function listMemberChannelIds(relay, key, config = DEFAULT_CONFIG) {
+  const pubkey = key.pubkey.toLowerCase();
+  const events = await relay.req({ kinds: [39002], '#p': [pubkey], limit: config.membershipPageLimit }, 15000);
+  const channelIds = [];
+  for (const event of events) {
+    const membersEvent = channelMembersFromEvent(event);
+    if (!membersEvent) continue;
+    const isMember = membersEvent.members.some((member) => member.pubkey === pubkey);
+    if (isMember) channelIds.push(membersEvent.channelId);
+  }
+  return Array.from(new Set(channelIds)).sort();
+}
+
+async function fetchChannelMetadata(relay, channelIds) {
+  const ids = Array.from(new Set(channelIds.filter(Boolean))).sort();
+  const channels = new Map();
+  if (!ids.length) return channels;
+  const events = await relay.req({ kinds: [39000], '#d': ids, limit: ids.length }, 15000);
+  for (const event of events) {
+    const channel = channelFromMetadataEvent(event);
+    if (channel) channels.set(channel.id, channel);
+  }
+  for (const id of ids) {
+    if (!channels.has(id)) channels.set(id, { id, name: id, about: '', event_id: null });
+  }
+  return channels;
+}
+
+async function listWatchedChannels(relay, key, config = DEFAULT_CONFIG) {
+  if (config.watchAllChannels) return await listChannels(relay);
+  const channelIds = await listMemberChannelIds(relay, key, config);
+  return await fetchChannelMetadata(relay, channelIds);
+}
+
 async function fetchProfiles(relay, pubkeys) {
   const authors = Array.from(new Set(pubkeys.filter(Boolean)));
   const profiles = new Map();
@@ -498,13 +553,14 @@ async function fetchProfiles(relay, pubkeys) {
 
 async function poll({ baseline = false, limit = 50 } = {}) {
   return await withRelay(async (relay, key, config) => {
-    const channels = await listChannels(relay);
+    const channels = await listWatchedChannels(relay, key, config);
     const state = loadJson(config.statePath, { seen_ids: [], channel_since: {} });
     let events = [];
-    const targets = channels.size ? Array.from(channels.keys()) : ['_global'];
+    const targets = Array.from(channels.keys());
+    if (!targets.length) return '';
     for (const channelId of targets) {
       const filter = { kinds: config.messageKinds, limit };
-      if (channelId !== '_global') filter['#h'] = [channelId];
+      filter['#h'] = [channelId];
       const since = Number(state.channel_since?.[channelId] || 0);
       if (since > 0) filter.since = since;
       const got = await relay.req(filter, 15000);
@@ -533,7 +589,7 @@ async function publishProfile() {
 
 async function publishAgentProfile() {
   return await withRelay(async (relay, key, config) => {
-    const channels = await listChannels(relay);
+    const channels = await listWatchedChannels(relay, key, config);
     const channelIds = Array.from(channels.keys());
     const content = buildAgentProfileContent({ pubkey: key.pubkey, channelIds, config });
     const event = signEvent(key, {
@@ -580,7 +636,7 @@ async function createChannel(name = 'herman', about = 'Work channel for Herman H
 
 async function postHandshake() {
   return await withRelay(async (relay, key) => {
-    const channels = await listChannels(relay);
+    const channels = await listWatchedChannels(relay, key);
     const chosen = Array.from(channels.values()).find((c) => /dm|herman|general|main|home|random/i.test(c.name)) || Array.from(channels.values())[0];
     if (!chosen) throw new Error('no Buzz channels found; create a channel first or pass --channel to post');
     const content = `${DEFAULT_CONFIG.profile.display_name} is now wired through agent buzz bridge. DM or mention ${DEFAULT_CONFIG.profile.display_name} here and the configured Hermes profile will respond back in Buzz.`;
@@ -693,7 +749,7 @@ async function handleTargetedEvent({ relay, key, config, event, channels, profil
 
 async function processTargetedOnce({ limit = 20 } = {}) {
   return await withRelay(async (relay, key, config) => {
-    const channels = await listChannels(relay);
+    const channels = await listWatchedChannels(relay, key, config);
     let events = [];
     for (const channelId of Array.from(channels.keys())) {
       const got = await relay.req({ kinds: config.messageKinds, '#h': [channelId], limit }, 15000);
@@ -730,10 +786,10 @@ async function runGateway() {
 
   async function refreshDirectory(relay, force = false) {
     const now = Date.now();
-    if (!force && now - lastDirectoryRefresh < 60_000 && channels.size) return;
-    channels = await listChannels(relay);
+    if (!force && now - lastDirectoryRefresh < config.directoryRefreshMs && channels.size) return;
+    channels = await listWatchedChannels(relay, key, config);
     lastDirectoryRefresh = now;
-    log(config, `directory channels=${channels.size}`);
+    log(config, `directory watched_channels=${channels.size} mode=${config.watchAllChannels ? 'all' : 'member'}`);
   }
 
   async function pollOnce(relay) {
@@ -795,8 +851,8 @@ async function runGateway() {
 async function health() {
   return await withRelay(async (relay, key) => {
     await relay.connect();
-    const channels = await listChannels(relay);
-    return { ok: true, pubkey: key.pubkey, npub: key.npub, channel_count: channels.size, channels: Array.from(channels.values()) };
+    const channels = await listWatchedChannels(relay, key);
+    return { ok: true, pubkey: key.pubkey, npub: key.npub, watched_channel_count: channels.size, channel_count: channels.size, channels: Array.from(channels.values()) };
   });
 }
 
