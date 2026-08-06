@@ -25,6 +25,7 @@ const DEFAULT_CONFIG = {
   queueMax: 8,
   directoryRefreshMs: Number(process.env.AGENT_BUZZ_DIRECTORY_REFRESH_MS || 30_000),
   membershipPageLimit: Number(process.env.AGENT_BUZZ_MEMBERSHIP_LIMIT || 500),
+  messagePollLimit: Number(process.env.AGENT_BUZZ_MESSAGE_POLL_LIMIT || 500),
   watchAllChannels: process.env.AGENT_BUZZ_WATCH_ALL_CHANNELS === '1',
   allowedAuthorPubkeys: (process.env.AGENT_BUZZ_ALLOWED_PUBKEYS || process.env.BUZZ_HERMAN_ALLOWED_PUBKEYS || '')
     .split(',')
@@ -795,8 +796,12 @@ async function runGateway() {
   async function pollOnce(relay) {
     await refreshDirectory(relay);
     let events = [];
+    const stateBeforeFetch = loadJson(config.statePath, { seen_ids: [], channel_since: {}, responded_ids: [], herman_message_ids: [] });
     for (const channelId of Array.from(channels.keys())) {
-      const got = await relay.req({ kinds: config.messageKinds, '#h': [channelId], limit: 20 }, 15000);
+      const filter = { kinds: config.messageKinds, '#h': [channelId], limit: config.messagePollLimit };
+      const since = Number(stateBeforeFetch.channel_since?.[channelId] || 0);
+      if (since > 0) filter.since = since;
+      const got = await relay.req(filter, 15000);
       events.push(...got);
     }
     events = events
@@ -804,23 +809,19 @@ async function runGateway() {
       .sort((a, b) => Number(a.created_at || 0) - Number(b.created_at || 0));
     if (!events.length) return;
     const profiles = await fetchProfiles(relay, events.map((e) => e.pubkey));
+    let unseenEvents = [];
     updateState(config, { seen_ids: [], responded_ids: [], herman_message_ids: [] }, (state) => {
+      unseenEvents = updateSeenState(state, events);
       for (const event of events) {
         if (event.pubkey?.toLowerCase() === key.pubkey.toLowerCase()) markStateList(state, 'herman_message_ids', event.id, 5000);
       }
       return state;
     });
-    for (const event of events) {
+    for (const event of unseenEvents) {
       const state = loadJson(config.statePath, { seen_ids: [], responded_ids: [], herman_message_ids: [] });
-      if (state.responded_ids?.includes(event.id) || state.seen_ids?.includes(event.id)) continue;
+      if (state.responded_ids?.includes(event.id)) continue;
       const target = shouldRespondToEvent(event, key, channels, config, new Set(state.herman_message_ids || []));
-      if (!target.respond) {
-        updateState(config, { seen_ids: [], responded_ids: [], herman_message_ids: [] }, (skipState) => {
-          markStateList(skipState, 'seen_ids', event.id);
-          return skipState;
-        });
-        continue;
-      }
+      if (!target.respond) continue;
       await handleTargetedEvent({ relay, key, config, event, channels, profiles });
     }
   }
