@@ -509,6 +509,24 @@ $S6_SUID hermes "$REAL" dashboard --stop 2>/dev/null || true
 echo "[startos] Starting dashboard on 0.0.0.0:${uiPort}"
 $S6_SUID hermes "$REAL" dashboard --host 0.0.0.0 --port ${uiPort} --no-open --insecure &
 
+# --- Start agent buzz bridge (background) ---
+# The bridge lives on the persistent data volume so its state survives package
+# updates, but the package refreshes the executable files on boot. It runs two
+# Buzz identities: Herman and Goku. Each watcher has its own state/logs and is
+# mention-gated to avoid accidental thread noise or agent reply loops.
+if [ -d "/opt/package-assets/agent-buzz-bridge" ]; then
+    mkdir -p "$HERMES_HOME/agent-buzz-bridge"
+    cp /opt/package-assets/agent-buzz-bridge/bridge.mjs "$HERMES_HOME/agent-buzz-bridge/bridge.mjs"
+    cp /opt/package-assets/agent-buzz-bridge/run-agent-buzz-bridge.sh "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh"
+    chown -R hermes:hermes "$HERMES_HOME/agent-buzz-bridge" 2>/dev/null || true
+    chmod 755 "$HERMES_HOME/agent-buzz-bridge/bridge.mjs" "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh" 2>/dev/null || true
+    for pid in $(pgrep -f "[a]gent-buzz-bridge/bridge.mjs gateway" 2>/dev/null || true); do
+        kill "$pid" 2>/dev/null || true
+    done
+    "$HERMES_HOME/agent-buzz-bridge/run-agent-buzz-bridge.sh" start || \\
+        echo "[startos] Warning: agent buzz bridge failed to start; continuing"
+fi
+
 # --- Start gateway (foreground) ---
 # --replace makes the gateway take over from any orphaned instance left by a
 # prior boot (it SIGTERM/SIGKILLs the recorded PID, clears the pid file, and
