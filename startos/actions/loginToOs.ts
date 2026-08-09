@@ -102,13 +102,15 @@ export async function ensureStartCli(
       "-c",
       [
         `target='${dataDir}/.local/bin/start-cli'`,
-        'if [ ! -x "$target" ]; then',
+        'wanted="start-cli ${START_CLI_VERSION}"',
+        'current="$("$target" --version 2>/dev/null || true)"',
+        'if [ ! -x "$target" ] || [ "$current" != "$wanted" ]; then',
         '  arch="$(uname -m)"',
         '  url="https://github.com/Start9Labs/start-technologies/releases/download/start-cli%2Fv${START_CLI_VERSION}/start-cli_${arch}-linux"',
         '  curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 120 -o "$target" "$url"',
         '  chmod 0755 "$target"',
         "fi",
-      ].join("; "),
+      ].join("\n"),
     ],
     { user: "root", env: { START_CLI_VERSION } },
   );
