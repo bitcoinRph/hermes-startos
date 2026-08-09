@@ -103,6 +103,10 @@ jobs:
             done
           fi
 
+      - name: Apply Hermes runtime patches
+        run: |
+          git -C upstream-project apply ../patches/hermes-lifecycle-guard-nul-open.patch
+
       # The Hermes Buzz platform adapter shells out to the `buzz` CLI for all
       # outbound messages; the upstream image does not ship it. Build it from
       # block/buzz (pinned commit for reproducibility) and package it as a
@@ -200,6 +204,10 @@ jobs:
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
           ### Highlights
+          - **Fix:** Hermes terminal-tool lifecycle guard no longer crashes
+            on malformed or binary-derived script path tokens containing NUL
+            bytes; those paths are treated as unreadable and the guard returns
+            normally.
           - **Buzz platform enabled end to end:** the buzz CLI ships as a
             packaged asset (built from block/buzz) and the adapter finds it
             via BUZZ_CLI_PATH; stale canary cli_path entries are healed;
