@@ -13,12 +13,15 @@ Hermes Agent is a self-improving AI agent from Nous Research running as a StartO
 - **The Hermes web dashboard** is exposed in the StartOS UI on port `9119`.
 - **Persistent service data** is stored in the package volume mounted at `/opt/data`.
 - **OpenAI Codex OAuth action** lets you configure ChatGPT Pro credentials from the StartOS UI.
+- **Login to StartOS** optionally enrolls a `start-cli` identity on the service volume so Hermes can administer the server after explicit approval.
+- **Revoke StartOS Access** removes the stored `start-cli` identity when you want to cut that access off.
 
 ## Getting set up
 
 1. Install the package on your Start9 server.
 2. After install, run the **Set OpenAI OAuth Credentials** action to configure your model provider tokens.
-3. Access the Hermes dashboard through the StartOS UI to configure messaging platforms and additional settings.
+3. Optional: run **Login to StartOS** if you want Hermes to use `start-cli` for StartOS administration. This grants root-equivalent server control; use only on a server where that is acceptable.
+4. Access the Hermes dashboard through the StartOS UI to configure messaging platforms and additional settings.
 
 ## Features
 
