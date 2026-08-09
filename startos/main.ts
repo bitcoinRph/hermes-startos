@@ -59,7 +59,7 @@ fi
 # Repair hermes-owned state that may have been touched from a root attach shell.
 # Include pairing approvals: hermes pairing approve from root attach shells can
 # leave 0600 root-owned approval files that the unprivileged gateway cannot read.
-for sub in cron profiles pairing platforms/pairing; do
+for sub in cron profiles pairing platforms/pairing .startos; do
     [ -d "$HERMES_HOME/$sub" ] && safe_chown_tree "$HERMES_HOME/$sub"
 done
 
@@ -96,7 +96,8 @@ $S6_SUID hermes mkdir -p \\
     "$HERMES_HOME/profiles" \\
     "$HERMES_HOME/pairing" \\
     "$HERMES_HOME/platforms/pairing" \\
-    "$HERMES_HOME/lazy-packages"
+    "$HERMES_HOME/lazy-packages" \\
+    "$HERMES_HOME/.startos"
 
 # --- Heal stale install-method stamp ---
 # 0.17.0 bakes the 'docker' stamp into the immutable install tree
