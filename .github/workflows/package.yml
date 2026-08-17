@@ -103,10 +103,6 @@ jobs:
             done
           fi
 
-      - name: Apply Hermes runtime patches
-        run: |
-          git -C upstream-project apply ../patches/hermes-lifecycle-guard-nul-open.patch
-
       # The Hermes Buzz platform adapter shells out to the `buzz` CLI for all
       # outbound messages; the upstream image does not ship it. Build it from
       # block/buzz (pinned commit for reproducibility) and package it as a
@@ -130,6 +126,25 @@ jobs:
           echo "$BUZZ_REV" > assets/buzz.rev
           ./assets/buzz --version 2>/dev/null || ./assets/buzz --help >/dev/null 2>&1 || true
           echo "Packaged $(basename "$bin") ($(du -h assets/buzz | cut -f1)) from block/buzz@$BUZZ_REV"
+
+      - name: Verify bundled Hermes runtime fixes
+        working-directory: upstream-project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lifecycle_src = Path('cron/lifecycle_guard.py').read_text()
+          required = [
+              'def _expand_candidate_path(candidate: str)',
+              'if not candidate or "\\x00" in candidate:',
+              'except (ValueError, RuntimeError, OSError):',
+              'path = _expand_candidate_path(candidate)',
+          ]
+          for needle in required:
+              if needle not in lifecycle_src:
+                  raise SystemExit(f'lifecycle NUL path guard missing: {needle}')
+          print('Hermes lifecycle NUL path guard verified')
+          PY
 
       - name: Verify bundled Codex OAuth fixes
         working-directory: upstream-project
@@ -204,27 +219,18 @@ jobs:
           Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
 
           ### Highlights
-          - **Fix:** Hermes terminal-tool lifecycle guard no longer crashes
-            on malformed or binary-derived script path tokens containing NUL
-            bytes; those paths are treated as unreadable and the guard returns
-            normally.
-          - **Buzz platform enabled end to end:** the buzz CLI ships as a
-            packaged asset (built from block/buzz) and the adapter finds it
-            via BUZZ_CLI_PATH; stale canary cli_path entries are healed;
-            LAN relay hostname pinning and private-CA trust restored; Buzz
-            auto-enables when relay credentials exist in .env
-          - **Fix:** "Set OpenAI OAuth Credentials" now merges into
-            auth.json instead of overwriting it (previously destroyed other
-            provider credentials, including the Nous session)
-          - Daemon env pins PYTHONUNBUFFERED and the image PATH (immediate
-            logs; correct subprocess command resolution)
-          - Upstream Hermes v0.20.0 "The Herald Release" (voice, research
-            verification, A2A v1.0, desktop artifacts, !command and /diff)
-          - StartOS 0.4.0 native build (start-sdk 2.0.9, inline boot script)
+          - Tracks upstream Hermes v0.20.2 / v2026.8.16, a patch release
+            rolling up the v2026.8.13..v2026.8.16 stability window for
+            downstream Docker/package consumers.
+          - Upstream now includes the terminal lifecycle guard NUL-path fix,
+            so this wrapper verifies the bundled fix instead of applying a
+            local patch during CI.
+          - Preserves the existing StartOS wrapper runtime: start-sdk 2.0.9,
+            inline boot script, Buzz CLI asset mount, dashboard auth bootstrap,
+            writable `/opt/data`, and immutable `/opt/hermes` install tree.
           - **Data preserved:** no data-layout changes — install as an update
             over your existing service (do NOT uninstall first; uninstalling
             deletes service data). Taking a backup first is recommended.
-          - Immutable install tree (read-only /opt/hermes); all mutable state on the data volume
 
           ### Sideloading
           Download \`hermes-agent-startos_x86_64.s9pk\` and sideload via your Start9 server UI under **System > Sideload Service**.
