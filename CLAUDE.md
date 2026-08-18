@@ -51,7 +51,7 @@ Current runtime model:
   (`BUZZ_RELAY_HOSTS_ENTRY` / `BUZZ_RELAY_HOST_IP`), and exports private-CA
   trust env vars when a combined CA bundle is present on the volume
 - upstream is pinned via the `upstream-project` submodule (currently
-  v0.20.0 / tag v2026.8.3, commit 3c27eb62)
+  v0.20.2 / tag v2026.8.16, commit df4b65147)
 - the package builds against start-sdk 2.0.9 (the native StartOS 0.4.0 SDK);
   StartOS 0.4.0 rejects s9pks built with pre-2.x SDKs at sideload, so never
   downgrade the SDK pin. The sdkVersion stamped in the packed s9pk comes from
