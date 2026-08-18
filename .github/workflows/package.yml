@@ -216,7 +216,7 @@ jobs:
           notes=$(cat <<EOF
           ## Hermes Agent ${version} for StartOS
 
-          Tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) v${version} (tag ${upstream_tag}) at \`${upstream_sha}\`.
+          Package version ${version} tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) tag ${upstream_tag} at \`${upstream_sha}\`.
 
           ### Highlights
           - Tracks upstream Hermes v0.20.2 / v2026.8.16, a patch release
@@ -225,6 +225,16 @@ jobs:
           - Upstream now includes the terminal lifecycle guard NUL-path fix,
             so this wrapper verifies the bundled fix instead of applying a
             local patch during CI.
+          - **Buzz platform enabled end to end:** the buzz CLI ships as a
+            packaged asset (built from block/buzz) and the adapter finds it
+            via BUZZ_CLI_PATH; stale canary cli_path entries are healed;
+            LAN relay hostname pinning and private-CA trust restored; Buzz
+            auto-enables when relay credentials exist in .env
+          - **Fix:** "Set OpenAI OAuth Credentials" now merges into
+            auth.json instead of overwriting it (previously destroyed other
+            provider credentials, including the Nous session)
+          - Daemon env pins PYTHONUNBUFFERED and the image PATH (immediate
+            logs; correct subprocess command resolution)
           - Preserves the existing StartOS wrapper runtime: start-sdk 2.0.9,
             inline boot script, Buzz CLI asset mount, dashboard auth bootstrap,
             writable `/opt/data`, and immutable `/opt/hermes` install tree.
