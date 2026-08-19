@@ -1,6 +1,6 @@
 # Hermes Agent for StartOS
 
-StartOS service package for [Hermes Agent](https://github.com/NousResearch/hermes-agent) v0.20.2 — a self-improving AI agent from Nous Research.
+StartOS service package for [Hermes Agent](https://github.com/NousResearch/hermes-agent) v0.20.4 — a self-improving AI agent from Nous Research.
 
 ## What this package does
 
