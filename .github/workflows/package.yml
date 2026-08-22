@@ -219,17 +219,17 @@ jobs:
           Package version ${version} tracks upstream [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) tag ${upstream_tag} at \`${upstream_sha}\`.
 
           ### Highlights
-          - Tracks upstream Hermes v0.20.4 / v2026.8.18, a patch release
-            rolling up the post-v0.20.2 stability window for downstream
-            Docker/package consumers.
-          - Upstream includes desktop glass/translucency work, tabbed
-            Sessions/Bots surfaces, Bot Mode group-chat fixes, SkillEvaluator
-            advisory scanning, cron media-send hardening, SessionDB contention
-            fixes, parked-branch update honesty, and kanban native OS
-            notification improvements.
-          - Upstream now includes the terminal lifecycle guard NUL-path fix,
-            so this wrapper verifies the bundled fix instead of applying a
-            local patch during CI.
+          - Tracks upstream Hermes v0.20.5 / v2026.8.19, a patch release
+            rolling up the v0.20.4 stability window for downstream Docker
+            image and StartOS package consumers.
+          - Upstream includes Bot Mode group-room threads, foldable
+            conversation summaries, blob-face avatars, PDF/file attachments,
+            keyless web-tier rotation, CLI polish, execution-discipline stall
+            guards, `hermes update` receipts, worktree commands, and cron
+            persistent-memory / per-job reasoning-effort support.
+          - Wrapper runtime ports the upstream API_SERVER_KEY bootstrap into
+            the StartOS inline boot script, keeping the loopback gateway
+            api_server initialized even when .env did not previously exist.
           - **Buzz platform enabled end to end:** the buzz CLI ships as a
             packaged asset (built from block/buzz) and the adapter finds it
             via BUZZ_CLI_PATH; stale canary cli_path entries are healed;

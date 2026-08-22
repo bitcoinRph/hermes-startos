@@ -124,6 +124,43 @@ if [ -f "$HERMES_HOME/.env" ]; then
     chmod 600 "$HERMES_HOME/.env" 2>/dev/null || true
 fi
 
+# --- Bootstrap loopback API key for gateway/cron API-server paths ---
+# Upstream v2026.8.19 made this independent of .env.example seeding after
+# missing API_SERVER_KEY left Docker installs without the loopback api_server.
+# The StartOS wrapper bypasses upstream stage2-hook.sh, so keep the equivalent
+# minimal bootstrap here while preserving operator-provided values.
+if [ -n "\${API_SERVER_KEY:-}" ]; then
+    if [ -f "$HERMES_HOME/.env" ] && grep -q '^API_SERVER_KEY=..*' "$HERMES_HOME/.env" 2>/dev/null; then
+        echo "[startos] Warning: API_SERVER_KEY is set in both container env and $HERMES_HOME/.env — the .env value wins at runtime"
+    else
+        if [ -f "$HERMES_HOME/.env" ]; then
+            sed -i '/^API_SERVER_KEY=$/d' "$HERMES_HOME/.env" 2>/dev/null || true
+        fi
+        [ "\${#API_SERVER_KEY}" -ge 16 ] || echo "[startos] Warning: container-provided API_SERVER_KEY is shorter than 16 chars — gateway api_server will refuse to start"
+        echo "[startos] API_SERVER_KEY provided via container environment — skipping generation"
+    fi
+elif ! grep -q '^API_SERVER_KEY=..*' "$HERMES_HOME/.env" 2>/dev/null; then
+    if [ ! -f "$HERMES_HOME/.env" ]; then
+        $S6_SUID hermes sh -c 'umask 077 && touch /opt/data/.env' 2>/dev/null || true
+    fi
+    if [ -f "$HERMES_HOME/.env" ]; then
+        _gen_key="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d '[:space:]')"
+        if [ -n "$_gen_key" ]; then
+            sed -i '/^API_SERVER_KEY=$/d' "$HERMES_HOME/.env" 2>/dev/null || true
+            if printf 'API_SERVER_KEY=%s\\n' "$_gen_key" >> "$HERMES_HOME/.env" 2>/dev/null; then
+                chown hermes:hermes "$HERMES_HOME/.env" 2>/dev/null || true
+                chmod 600 "$HERMES_HOME/.env" 2>/dev/null || true
+                echo "[startos] Generated API_SERVER_KEY for the loopback gateway api_server"
+            else
+                echo "[startos] Warning: could not write API_SERVER_KEY to $HERMES_HOME/.env — gateway api_server may be unavailable"
+            fi
+        fi
+        unset _gen_key
+    else
+        echo "[startos] Warning: could not create $HERMES_HOME/.env — gateway api_server may be unavailable"
+    fi
+fi
+
 # --- Fix config.yaml permissions ---
 if [ -f "$HERMES_HOME/config.yaml" ]; then
     chown hermes:hermes "$HERMES_HOME/config.yaml" 2>/dev/null || true
